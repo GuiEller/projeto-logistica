@@ -1,0 +1,46 @@
+# Material de consulta local, fora do repositório público
+_referencia/
+
+# Segredos. Nunca versionar. Só o .env.example (sem valores reais) pode entrar
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.streamlit/secrets.toml
+
+# Dados brutos da Olist. A pasta existe no repositório, o conteúdo não
+data/raw/*
+!data/raw/.gitkeep
+analise/dados/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+
+# Node (caso apareça alguma ferramenta de front ou lint)
+node_modules/
+
+# Banco local do Docker, se o volume for mapeado para uma pasta
+pgdata/
+
+# Databricks CLI
+.databricks/
+
+# Logs
+*.log
+
+# Sistema e editores
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
