@@ -365,3 +365,4 @@ Toda decisão relevante entra aqui, com data e motivo. É a memória do projeto 
 | 27/10/2026 | Escala provada só em texto, na seção "O que muda com 100x mais dados" | A Olist tem cerca de 100 mil pedidos, então provar escala seria fingir. Teste sintético e carga incremental viram próximo passo |
 | 27/10/2026 | Prazo de 10 para 11 dias, sem datas fixas | O dia 1 passou a incluir instalar WSL2, Docker e Git, e criar o repositório |
 | 28/10/2026 | Toda tarefa vira Issue (`correção`, `melhoria` ou `nova função`) e toda entrega entra por Pull Request com modelo fixo | Rastreabilidade do que foi feito e por quê, e um padrão que qualquer agente ou pessoa segue. O fluxo completo está no `CLAUDE.md` |
+| 28/10/2026 | Contar registros de CSV com o módulo `csv` do Python, nunca com `wc -l` | O CSV de avaliações tem quebras de linha dentro das aspas (comentários dos clientes). O `wc -l` deu 104.720 linhas contra 99.224 registros reais |
