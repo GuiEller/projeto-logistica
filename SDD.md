@@ -7,7 +7,7 @@ Documento de desenho do projeto (Software Design Document). Explica o que vamos 
 | Autor | Guilherme Eler |
 | Início | 27/10/2026 |
 | Duração prevista | 11 dias úteis, prazo flexível |
-| Status | Recomeço do zero em 27/10/2026. A versão anterior ficou em `_referencia/` só como gabarito para conferir o trabalho. Tudo será reconstruído passo a passo |
+| Status | Dividido em duas fases, cada uma com um post no LinkedIn. Fase 1 (PostgreSQL e SQL) concluída em 03/11/2026. Fase 2 (Databricks e painel) em seguida |
 
 ---
 
@@ -328,23 +328,28 @@ Estes números vêm do pipeline local e do teste de hipótese, e o painel precis
 
 ## 13. Roteiro
 
-Cada dia termina com o resumo do que foi aprendido e as perguntas de checagem no estilo de entrevista.
+O projeto foi dividido em duas fases. Cada fase termina com uma entrega que funciona sozinha e um post no LinkedIn contando o que foi feito e o que os dados mostraram.
 
-As datas ficam livres. O projeto recomeçou do zero e o prazo é guia, não regra.
+### Fase 1. Pipeline local e análise em SQL
 
-| Dia | Entrega | O que você aprende |
+| Etapa | Entrega | Status |
 |---|---|---|
-| 1 | Git, WSL2 e Docker Desktop instalados, repositório público no GitHub, `.gitignore` | ambiente, Docker, o que entra e o que não entra no Git |
-| 2 | Staging, carga, modelo estrela e "Integridade ok" | staging, carga, grão, por que testar o pipeline |
-| 3 | Análises SQL, teste de hipótese, pytest e CI | window functions, estatística, testes automatizados |
-| 4 | Conta no Databricks e notebook bronze | nuvem, Delta, por que guardar o dado cru |
-| 5 | Notebook prata em PySpark | PySpark, avaliação preguiçosa, limpeza distribuída |
-| 6 | Notebook ouro, Parquet exportado, conferência com o PostgreSQL | Databricks SQL, reconciliação de dados |
-| 7 | Streamlit com Visão geral e Vendas | estrutura de app, cache, escolha de gráfico |
-| 8 | Página Logística | storytelling com dados |
-| 9 | Página Cliente, filtros, acabamento | interatividade, experiência de quem lê |
+| 1 | Git, WSL2, Docker, repositório público, extração dos CSVs | feito |
+| 2 | Staging, carga, modelo estrela e "Integridade ok" | feito |
+| 3 | Visões, 6 análises SQL e teste de hipótese | feito |
+| 4 | README da fase 1 e post no LinkedIn | em andamento |
+
+### Fase 2. Nuvem, painel e engenharia
+
+| Etapa | Entrega | O que você aprende |
+|---|---|---|
+| 5 | pytest e GitHub Actions | testes automatizados, CI |
+| 6 | Conta no Databricks e notebook bronze | nuvem, Delta, por que guardar o dado cru |
+| 7 | Notebook prata em PySpark | PySpark, avaliação preguiçosa, limpeza distribuída |
+| 8 | Notebook ouro, Parquet exportado, conferência com o PostgreSQL | Databricks SQL, reconciliação de dados |
+| 9 | Streamlit com Visão geral, Vendas, Logística, Cliente e Recomendações | estrutura de app, cache, storytelling |
 | 10 | App publicado, README final com prints, link e seção de escala | deploy, documentação, escala |
-| 11 | Currículo, LinkedIn e Gupy atualizados, post publicado | como contar o projeto para recrutador |
+| 11 | Currículo, Gupy e post da fase 2 | como contar o projeto para recrutador |
 
 ## 14. Registro de decisões
 
@@ -368,3 +373,6 @@ Toda decisão relevante entra aqui, com data e motivo. É a memória do projeto 
 | 28/10/2026 | Contar registros de CSV com o módulo `csv` do Python, nunca com `wc -l` | O CSV de avaliações tem quebras de linha dentro das aspas (comentários dos clientes). O `wc -l` deu 104.720 linhas contra 99.224 registros reais |
 | 29/10/2026 | Staging de avaliações sem chave primária | O `review_id` se repete em 789 casos na origem. Com chave primária a carga quebraria. Escolher a avaliação mais recente é regra de negócio e fica na etapa seguinte |
 | 29/10/2026 | Ler CSV com `utf-8-sig` quando o arquivo puder ter BOM | O `product_category_name_translation.csv` começa com o caractere invisível `﻿`, que grudaria no nome da primeira coluna (PySpark e pandas) |
+| 03/11/2026 | Projeto dividido em duas fases, cada uma com um post no LinkedIn | Mostrar resultado mais cedo. A fase 1 já prova SQL, modelagem e estatística, que são os itens mais pedidos nas vagas |
+| 03/11/2026 | Colunas do `dw` com nomes em português (`vendedor_id`, `produto_id`, `cliente_id`) | A staging espelha o CSV em inglês, e o `dw` é a camada do negócio. A troca de nome deixa claro em que camada cada consulta está |
+| 03/11/2026 | Teste 5 da integridade reescrito para "atraso só existe com data de entrega" | A versão anterior exigia ao mesmo tempo atraso calculado e entrega nula, o que nunca acontece. Era um teste que não podia falhar, e teste que não falha não protege nada |

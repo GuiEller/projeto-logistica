@@ -1,0 +1,30 @@
+# Sobe um PostgreSQL 16 que, na primeira execução, cria a staging, carrega os CSVs,
+# monta o modelo estrela, cria as visões e roda os testes de integridade.
+#   docker compose up -d
+#   docker compose logs -f db      (até aparecer "Integridade ok", cerca de 1 minuto)
+# Para recarregar do zero      docker compose down -v && docker compose up -d
+services:
+  db:
+    image: postgres:16
+    container_name: olist-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: olist
+    ports:
+      - "5432:5432"
+    volumes:
+      # O 002 lê os CSVs de /data/raw. Só leitura (ro), o banco nunca altera o dado bruto.
+      - ./data/raw:/data/raw:ro
+      - ./db:/projeto/db:ro
+      - ./sql:/projeto/sql:ro
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      # Volume nomeado guarda o banco entre um "up" e outro. "down -v" apaga.
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d olist"]
+      interval: 5s
+      retries: 20
+
+volumes:
+  pgdata:
