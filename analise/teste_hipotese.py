@@ -33,8 +33,9 @@ def br(x, casas=2):
     return f"{x:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def carregar() -> pd.DataFrame:
-    df = pd.read_csv(ENTRADA)
+def carregar(caminho=ENTRADA) -> pd.DataFrame:
+    # O caminho é parâmetro para o pytest poder passar um CSV pequeno de teste.
+    df = pd.read_csv(caminho)
     df = df.dropna(subset=["nota_avaliacao", "entregue_no_prazo"])
     df["entregue_no_prazo"] = df["entregue_no_prazo"].astype(str).str.lower().isin(["t", "true", "1"])
     df["atrasado"] = ~df["entregue_no_prazo"]

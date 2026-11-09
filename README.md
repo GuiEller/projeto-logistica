@@ -1,5 +1,7 @@
 # Olist Logística
 
+[![CI](https://github.com/GuiEller/projeto-logistica/actions/workflows/ci.yml/badge.svg)](https://github.com/GuiEller/projeto-logistica/actions/workflows/ci.yml)
+
 **O que mais pesa na satisfação do cliente de um marketplace, e por onde começar a agir?**
 
 Pipeline de dados de ponta a ponta com a base pública da [Olist](https://github.com/olist/work-at-olist-data), cerca de 100 mil pedidos reais de um marketplace brasileiro entre 2016 e 2018.

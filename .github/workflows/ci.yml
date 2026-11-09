@@ -1,0 +1,46 @@
+# Roda a cada push e a cada Pull Request. O merge só acontece com os dois jobs verdes.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Testes da lógica em Python. Rápido, não precisa de banco.
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pytest -v
+
+  # O pipeline SQL inteiro, do CSV bruto até o "Integridade ok". Se uma migration
+  # quebrar uma regra antiga, os testes de integridade param o container e o job fica vermelho.
+  pipeline-sql:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/baixar_dados.sh
+      - run: docker compose up -d
+      - name: Espera o "Integridade ok"
+        run: |
+          for i in $(seq 1 60); do
+            if docker compose logs db | grep -q "Integridade ok"; then
+              docker compose logs db | grep "Integridade ok"
+              exit 0
+            fi
+            # Com ON_ERROR_STOP, uma falha de migration ou de teste derruba o container.
+            if [ "$(docker inspect -f '{{.State.Running}}' olist-db)" != "true" ]; then
+              docker compose logs db
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "Tempo esgotado sem Integridade ok"
+          docker compose logs db
+          exit 1
