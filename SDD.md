@@ -337,7 +337,7 @@ O projeto foi dividido em duas fases. Cada fase termina com uma entrega que func
 | 1 | Git, WSL2, Docker, repositório público, extração dos CSVs | feito |
 | 2 | Staging, carga, modelo estrela e "Integridade ok" | feito |
 | 3 | Visões, 6 análises SQL e teste de hipótese | feito |
-| 4 | README da fase 1 e post no LinkedIn | em andamento |
+| 4 | README da fase 1 | feito. O post foi trocado por um vídeo único no fim da fase 2 |
 
 ### Fase 2. Nuvem, painel e engenharia
 
@@ -376,3 +376,10 @@ Toda decisão relevante entra aqui, com data e motivo. É a memória do projeto 
 | 03/11/2026 | Projeto dividido em duas fases, cada uma com um post no LinkedIn | Mostrar resultado mais cedo. A fase 1 já prova SQL, modelagem e estatística, que são os itens mais pedidos nas vagas |
 | 03/11/2026 | Colunas do `dw` com nomes em português (`vendedor_id`, `produto_id`, `cliente_id`) | A staging espelha o CSV em inglês, e o `dw` é a camada do negócio. A troca de nome deixa claro em que camada cada consulta está |
 | 03/11/2026 | Teste 5 da integridade reescrito para "atraso só existe com data de entrega" | A versão anterior exigia ao mesmo tempo atraso calculado e entrega nula, o que nunca acontece. Era um teste que não podia falhar, e teste que não falha não protege nada |
+| 03/11/2026 | Um vídeo único no LinkedIn com o projeto inteiro, no lugar de um post por fase | O destaque do portfólio é a stack completa, da extração ao painel. Mostrar só a metade enfraquece a história |
+| 09/11/2026 | CI com dois jobs, pytest e pipeline SQL completo | O segundo job sobe o Postgres do zero e só fica verde com o "Integridade ok". Uma migration que quebre uma regra antiga é pega no PR, não na máquina de alguém |
+| 09/11/2026 | Dinheiro em `DECIMAL(10,2)` também no Spark | `DOUBLE` não fecha a soma ao centavo, e a ouro precisa bater com o Postgres exatamente |
+| 09/11/2026 | Parquet do painel gravado pelo pandas, um arquivo por tabela | O Spark grava uma pasta com vários pedaços. As tabelas do painel têm dezenas de linhas, então o pandas resolve sem custo |
+| 09/11/2026 | Conferência ouro x Postgres como teste do pytest, rodando no CI | A regra "toda camada nova é conferida contra a anterior" vira algo que roda sozinho, e não uma checagem manual que alguém esquece |
+| 09/11/2026 | Gráficos do painel em Altair | Já vem com o Streamlit, então não entra dependência nova, e permite tooltip e destaque de uma barra |
+| 09/11/2026 | `streamlit>=1.50` no `requirements.txt` | A máquina tinha dois Pythons, e o do pytest estava com Streamlit 1.48, sem o parâmetro `width`. Versão mínima fixada evita o mesmo erro no deploy |

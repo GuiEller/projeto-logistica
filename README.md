@@ -6,12 +6,16 @@
 
 Pipeline de dados de ponta a ponta com a base pública da [Olist](https://github.com/olist/work-at-olist-data), cerca de 100 mil pedidos reais de um marketplace brasileiro entre 2016 e 2018.
 
+**[Abrir o painel](LINK_DO_PAINEL)**
+
+![Painel, página Logística](resultados/painel_logistica.png)
+
 O projeto tem duas fases.
 
 | Fase | O que entrega | Status |
 |---|---|---|
 | 1 | PostgreSQL em Docker, modelo estrela, testes de integridade, 6 análises em SQL e teste de hipótese em Python | concluída |
-| 2 | Pipeline em Databricks (PySpark, Delta Lake, arquitetura medalhão), painel em Streamlit, pytest e CI | em andamento |
+| 2 | Pipeline em Databricks (PySpark, Delta Lake, arquitetura medalhão), painel em Streamlit, pytest e CI | concluída |
 
 ## As ferramentas e o que cada uma faz aqui
 
@@ -23,8 +27,10 @@ O projeto tem duas fases.
 | **Python, pandas e SciPy** | Teste de hipótese (Mann-Whitney U, qui-quadrado, intervalo de confiança) e gráficos | `analise/teste_hipotese.py` |
 | **Bash** | Baixa os CSVs da fonte oficial e exporta a base do teste | `scripts/` |
 | **Git e GitHub** | Cada entrega nasce de uma Issue e entra por Pull Request | histórico do repositório |
-| **Databricks, PySpark e Delta Lake** | Fase 2. O mesmo pipeline em camadas bronze, prata e ouro, conferido contra o PostgreSQL | em andamento |
-| **Streamlit** | Fase 2. Painel publicado com link aberto | em andamento |
+| **Databricks, PySpark e Delta Lake** | O mesmo pipeline refeito na nuvem em camadas bronze, prata e ouro, conferido contra o PostgreSQL | `databricks/` |
+| **Parquet** | As tabelas da camada ouro saem como arquivos pequenos que o painel lê sem banco | `app/data/` |
+| **Streamlit** | Painel com cinco páginas, cada uma terminando com a conclusão escrita | `app/` |
+| **pytest e GitHub Actions** | Testes da lógica em Python, do painel e da conferência entre as camadas, rodando a cada push | `tests/`, `.github/workflows/` |
 
 ## O que os dados mostraram
 
@@ -51,13 +57,17 @@ docker compose logs -f db          # espere aparecer "Integridade ok"
 
 Para consultar o banco, use `docker exec -it olist-db psql -U postgres -d olist`. Para rodar uma análise, use `docker exec -i olist-db psql -U postgres -d olist < sql/analises/05_atraso_vs_avaliacao.sql`.
 
-Teste de hipótese.
+Teste de hipótese, testes automatizados e painel.
 
 ```bash
 pip install -r requirements.txt
 ./scripts/exportar_csv.sh
 python analise/teste_hipotese.py
+pytest                             # com o container no ar, inclui a conferência contra o Postgres
+streamlit run app/Home.py
 ```
+
+Databricks. Os notebooks de `databricks/` rodam no Databricks Free Edition. Os 8 CSVs vão para o volume `workspace.default.olist_raw`, e os notebooks rodam na ordem `01_bronze`, `02_prata` e `03_ouro`. O último grava os Parquet do painel no volume `workspace.ouro.exportacao`, de onde eles são copiados para `app/data/`.
 
 ## Como foi feito
 
@@ -121,6 +131,47 @@ Regras de tratamento que mudam o resultado.
 | `06_atraso_por_estado` | Onde agir primeiro? | `RANK`, `HAVING` |
 
 **Teste de hipótese** (`analise/teste_hipotese.py`). A nota vai de 1 a 5 e não segue distribuição normal, então o teste t não serve. Usei Mann-Whitney U com correlação rank-biserial para o tamanho do efeito, e qui-quadrado com intervalo de confiança de 95% para a proporção de notas baixas.
+
+### Fase 2. Nuvem, painel e engenharia
+
+```mermaid
+flowchart LR
+    A[8 CSVs<br/>volume do Unity Catalog] --> B[bronze<br/>Delta, tudo texto]
+    B -->|PySpark| C[prata<br/>tipado e limpo]
+    C -->|PySpark| D[ouro<br/>modelo estrela e KPIs]
+    D -->|Parquet| E[app/data]
+    E --> F[painel Streamlit]
+    E -.->|conferência no CI| G[(PostgreSQL)]
+```
+
+**Arquitetura medalhão** (`databricks/`). Cada camada tem um contrato. A bronze guarda o CSV como chegou, para reprocessar sem baixar de novo se uma regra mudar. A prata aplica tipos e as mesmas regras da Fase 1, com dinheiro em `DECIMAL` para a receita fechar ao centavo. A ouro monta as duas fatos e as dimensões e calcula as tabelas do painel. Cada notebook termina com `assert`, então uma camada errada não alimenta a seguinte. O Spark não tem `DISTINCT ON`, então a avaliação mais recente sai de `row_number` numa window.
+
+**Conferência entre camadas** (`tests/test_conferencia.py`). Duas fontes que deveriam ser iguais e não foram conferidas são duas fontes de erro. O teste compara os Parquet da ouro com o PostgreSQL. Total de pedidos, receita e clientes, e mês a mês pedidos, clientes e receita. No CI, um job sobe o Postgres do zero, espera o "Integridade ok" e roda essa conferência.
+
+**Painel** (`app/`). Lê só os Parquet, então não depende de banco e não cai. Cada página responde uma pergunta e termina com a conclusão escrita, porque gráfico sem conclusão deixa a análise para o leitor.
+
+| Página | Pergunta |
+|---|---|
+| Visão geral | Como o negócio está indo? |
+| Vendas | De onde vem a receita? |
+| Logística | Onde a entrega falha? |
+| Cliente | O atraso derruba a nota? |
+| Recomendações | O que fazer primeiro? |
+
+**Testes** (`tests/`). A lógica do teste de hipótese é testada com 14 pedidos inventados de resultado conhecido. Cada página do painel é aberta sem navegador com o `AppTest` do Streamlit. O CI roda tudo a cada push e a cada Pull Request.
+
+## O que muda com 100x mais dados
+
+A base da Olist tem cerca de 100 mil pedidos e cabe numa máquina. Provar escala com ela seria fingir, então esta parte fica no texto.
+
+| Ponto | O que muda |
+|---|---|
+| Carga | Em vez de recarregar tudo, carga incremental só com os pedidos novos (`MERGE` no Delta) |
+| Delta Lake | Particionar por mês, para uma consulta de um período ler só os arquivos daquele mês |
+| Chaves | `customer_unique_id` e a chave de data são estáveis, então uma carga nova não quebra as antigas |
+| Testes de integridade | Continuam iguais, porque comparam totais e valem para qualquer volume |
+| Painel | Já lê Parquet agregado, então o volume bruto nunca chega até ele |
+| PostgreSQL local | Deixaria de ser a referência. A conferência passaria a comparar a ouro com a contagem da bronze |
 
 ## Recomendações
 
