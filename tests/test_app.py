@@ -35,4 +35,5 @@ def test_menu_abre_na_visao_geral(monkeypatch):
     monkeypatch.syspath_prepend(str(APP))
     at = AppTest.from_file(str(APP / "Home.py"), default_timeout=30).run()
     assert not at.exception
-    assert at.title[0].value == "Olist Logística"
+    # A primeira página abre com a descoberta principal, não com o nome do projeto.
+    assert at.title[0].value == "O atraso na entrega é o que mais derruba a nota"
