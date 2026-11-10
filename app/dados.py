@@ -232,8 +232,12 @@ def mapa_atraso(estados: pd.DataFrame, altura: int = 420, uf: str | None = None,
     Estado fora do filtro fica cinza claro. Com `uf`, os outros estados ficam apagados e o escolhido ganha contorno.
     """
     campos = list(dict.fromkeys(["estado", "pedidos", campo]))
-    # Uma cor só, do claro ao escuro. Laranja porque atraso é sempre laranja no painel.
-    escala = alt.Scale(range=["#fbe5d8", "#ec8f5c", DESTAQUE, "#7a2e0b"])
+    volume = campo == "pedidos"
+    # Uma cor só, do claro ao escuro. Laranja porque atraso é sempre laranja no painel e azul é volume.
+    # No volume a escala é de raiz quadrada: SP tem 40 mil pedidos e RR tem 46, e numa escala linear quase todo o mapa ficaria claro.
+    escala = (alt.Scale(type="sqrt", range=["#dce8f7", "#6f9fd8", AZUL, "#0f3a7a"]) if volume
+              else alt.Scale(range=["#fbe5d8", "#ec8f5c", DESTAQUE, "#7a2e0b"]))
+    formato = ",d" if volume else ".1%"
     # Duas camadas de polígonos. O Vega apaga o polígono que não tem valor no campo da cor, então o Brasil inteiro
     # vai primeiro em cinza, e os estados com dado vêm por cima. Sem o fundo, o mapa filtrado ficava com buracos.
     fundo = alt.Chart(alt.Data(values=estados_geo()["features"])).mark_geoshape(
@@ -248,20 +252,21 @@ def mapa_atraso(estados: pd.DataFrame, altura: int = 420, uf: str | None = None,
         .transform_filter(f"isValid(datum['{campo}'])")
         .encode(
             color=alt.Color(f"{campo}:Q", scale=escala,
-                            legend=alt.Legend(title=titulo, format=".0%", orient="bottom", gradientLength=220,
+                            legend=alt.Legend(title=titulo, format=",d" if volume else ".0%", orient="bottom", gradientLength=220,
                                               titleLimit=320)),
             # Com um estado escolhido, os outros perdem força em vez de sumir. O mapa continua dando o contexto.
             opacity=alt.condition(visivel, alt.value(1), alt.value(0.3)),
             stroke=alt.condition(destacado, alt.value(TINTA), alt.value("#ffffff")),
             strokeWidth=alt.condition(destacado, alt.value(2), alt.value(1)),
-            tooltip=[alt.Tooltip("estado:N", title="Estado"), alt.Tooltip(f"{campo}:Q", title=titulo, format=".1%"),
-                     alt.Tooltip("pedidos:Q", title="Pedidos", format=",")],
+            tooltip=[alt.Tooltip("estado:N", title="Estado"), alt.Tooltip(f"{campo}:Q", title=titulo, format=formato)]
+                    + ([] if volume else [alt.Tooltip("pedidos:Q", title="Pedidos", format=",")]),
         )
         .add_params(clique)
     )
     # Sigla branca sobre os laranjas escuros e preta sobre os claros. No mar, sempre preta.
     rotulos = siglas_estados().merge(estados[["estado", campo]], on="estado", how="left")
-    corte = rotulos[campo].quantile(0.6)
+    # No volume o corte é um quinto do maior estado. O quantil não acompanha a escala de raiz e deixava sigla branca em azul claro.
+    corte = 0.2 * rotulos[campo].max() if volume else rotulos[campo].quantile(0.6)
     rotulos["clara"] = ~rotulos.no_mar & (rotulos[campo] >= corte)
     rotulos["visivel"] = (rotulos.estado == uf) if uf else True
     # A linha termina no ponto do mar e a sigla fica um pouco à direita dela, para a linha não riscar a letra.
