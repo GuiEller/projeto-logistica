@@ -162,7 +162,7 @@ with esq:
         desenhar_clicavel((pontos + siglas).properties(height=340), "dispersao", parametros=("uf",))
         st.caption("Laranja marca o RJ. Clique num estado para filtrar o painel por ele. Sigla nos 4 estados com mais pedidos, nos 3 que mais atrasam e no que menos atrasa. "
                    "Correlação entre estados não fala de cada pedido, mas confirma no mapa o que "
-                   "o teste de hipótese mostrou pedido a pedido.")
+                   "as faixas de atraso mostram pedido a pedido.")
 with dir:
     with painel("Quanto cada ação rende em notas 1 e 2", "impacto",
                 # Diferença entre duas proporções se fala em pontos percentuais. "53,2% a menos" seria outra conta.
@@ -237,7 +237,7 @@ with painel("De onde sai cada número", "bases",
         ("Pedidos entregues com estado do cliente", estados.pedidos.sum(),
          f"Mapa e ranking de atraso ({pct(media_nacional)} de atraso)"),
         ("Pedidos entregues e avaliados", faixas.pedidos.sum(),
-         f"Faixas de atraso e teste de hipótese ({pct(r.pct_atrasados)} de atraso)"),
+         f"Faixas de atraso e nota média ({pct(r.pct_atrasados)} de atraso)"),
     ], columns=["Base", "Pedidos", "Onde aparece"]).astype({"Pedidos": int}), hide_index=True, width="stretch",
         column_config={"Pedidos": st.column_config.NumberColumn(format="localized")})
 
