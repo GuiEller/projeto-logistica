@@ -116,7 +116,28 @@ def tamanho_amostra(p1: float, p2: float, alfa: float = 0.05, poder: float = 0.8
     return math.ceil(termo ** 2 / (p1 - p2) ** 2)
 
 
+def razao(parte: float, total: float) -> float:
+    # Divisão que não quebra num estado sem nenhum pedido no grupo. Sem dado vira nan e aparece como traço.
+    return parte / total if total else float("nan")
+
+
+def faixas_do_estado(uf: str | None) -> pd.DataFrame:
+    """Pedidos, notas baixas e nota média por faixa de atraso, de um estado ou do Brasil inteiro."""
+    t = ler("faixa_por_estado")
+    t = t[t.estado == uf] if uf else t
+    # Soma das contagens e só depois a divisão. Média das notas médias dos estados daria peso igual a RR e SP.
+    f = t.groupby("faixa_atraso", as_index=False)[["pedidos", "notas_baixas", "soma_notas"]].sum()
+    # O prefixo "1. ", "2. " existe só para ordenar. Na tela, sai.
+    f["situacao"] = f.faixa_atraso.str.split(". ", n=1).str[1]
+    f["atrasado"] = f.faixa_atraso.str[0].astype(int) >= 3
+    f["nota_media"] = f.soma_notas / f.pedidos
+    f["pct_nota_baixa"] = f.notas_baixas / f.pedidos
+    return f.sort_values("faixa_atraso")
+
+
 def num(x, casas=0):
+    if pd.isna(x):
+        return "sem dado"
     return f"{x:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
@@ -173,31 +194,142 @@ def painel(titulo: str, chave: str, descricao: str | None = None):
     return bloco
 
 
-def mapa_atraso(estados: pd.DataFrame, altura: int = 420):
-    """Mapa do Brasil com a taxa de atraso de cada estado. Estado fora do filtro fica cinza claro."""
-    # O lookup cruza a sigla de cada polígono do IBGE com a linha do estado na tabela de entrega.
-    campos = ["estado", "regiao", "pedidos", "taxa_atraso", "nota_media"]
+# Estados pequenos do litoral não cabem a sigla dentro. Ela vai para o mar, numa coluna, com uma linha até o estado.
+SIGLA_NO_MAR = {"RN": (-33.4, -5.3), "PB": (-33.4, -6.8), "PE": (-33.4, -8.3), "AL": (-33.4, -9.8),
+                "SE": (-33.4, -11.3), "ES": (-38.2, -20.6), "RJ": (-41.2, -24.4)}
+# O DF fica dentro de GO. A sigla de GO sai um pouco do centro para as duas não se encostarem.
+SIGLA_DESLOCADA = {"GO": (-50.4, -15.0)}
+
+
+@st.cache_data
+def siglas_estados() -> pd.DataFrame:
+    """Onde escrever a sigla de cada estado: no centro do maior polígono, ou no mar para os pequenos do litoral."""
+    linhas = []
+    for f in estados_geo()["features"]:
+        geo = f["geometry"]
+        aneis = [geo["coordinates"][0]] if geo["type"] == "Polygon" else [p[0] for p in geo["coordinates"]]
+        # Centro de área do maior anel (fórmula do polígono). A média dos vértices puxaria para o litoral recortado.
+        melhor = (0, 0, 0)
+        for anel in aneis:
+            a = cx = cy = 0
+            for (x0, y0), (x1, y1) in zip(anel, anel[1:]):
+                c = x0 * y1 - x1 * y0
+                a, cx, cy = a + c, cx + (x0 + x1) * c, cy + (y0 + y1) * c
+            if abs(a) > melhor[0]:
+                melhor = (abs(a), cx / (3 * a), cy / (3 * a))
+        uf = f["properties"]["sigla"]
+        lon, lat = melhor[1], melhor[2]
+        lon_t, lat_t = SIGLA_NO_MAR.get(uf) or SIGLA_DESLOCADA.get(uf) or (lon, lat)
+        linhas.append({"estado": uf, "lon": lon, "lat": lat, "lon_t": lon_t, "lat_t": lat_t,
+                       "no_mar": uf in SIGLA_NO_MAR})
+    return pd.DataFrame(linhas)
+
+
+def mapa_atraso(estados: pd.DataFrame, altura: int = 420, uf: str | None = None, campo: str = "taxa_atraso",
+                titulo: str = "Pedidos entregues depois do prazo"):
+    """Mapa do Brasil pintado por `campo`, com a sigla de cada estado e clique para escolher um estado.
+
+    Estado fora do filtro fica cinza claro. Com `uf`, os outros estados ficam apagados e o escolhido ganha contorno.
+    """
+    campos = list(dict.fromkeys(["estado", "pedidos", campo]))
     # Uma cor só, do claro ao escuro. Laranja porque atraso é sempre laranja no painel.
     escala = alt.Scale(range=["#fbe5d8", "#ec8f5c", DESTAQUE, "#7a2e0b"])
-    poligonos = alt.Chart(alt.Data(values=estados_geo()["features"]))
-    # Duas camadas. O Vega apaga o polígono que não tem valor no campo da cor, então o Brasil inteiro vai
-    # primeiro em cinza, e os estados com dado vêm por cima. Sem o fundo, o mapa filtrado ficava com buracos.
-    fundo = poligonos.mark_geoshape(fill=NEUTRO_CLARO, stroke="#ffffff", strokeWidth=1)
+    # Duas camadas de polígonos. O Vega apaga o polígono que não tem valor no campo da cor, então o Brasil inteiro
+    # vai primeiro em cinza, e os estados com dado vêm por cima. Sem o fundo, o mapa filtrado ficava com buracos.
+    fundo = alt.Chart(alt.Data(values=estados_geo()["features"])).mark_geoshape(
+        fill=NEUTRO_CLARO, stroke="#ffffff", strokeWidth=1)
+    destacado = f"datum.estado == '{uf}'"
+    visivel = destacado if uf else "true"
+    clique = alt.selection_point(name="uf", fields=["estado"], on="click")
     dados = (
-        poligonos.mark_geoshape(stroke="#ffffff", strokeWidth=1)
+        alt.Chart(alt.Data(values=estados_geo()["features"]))
+        .mark_geoshape(cursor="pointer")
         .transform_lookup(lookup="properties.sigla", from_=alt.LookupData(estados[campos], "estado", campos))
-        .transform_filter("isValid(datum.taxa_atraso)")
+        .transform_filter(f"isValid(datum['{campo}'])")
         .encode(
-            color=alt.Color("taxa_atraso:Q", scale=escala,
-                            legend=alt.Legend(title="Pedidos entregues depois do prazo", format=".0%",
-                                              orient="bottom", gradientLength=220, titleLimit=300)),
-            tooltip=[alt.Tooltip("properties.sigla:N", title="Estado"),
-                     alt.Tooltip("taxa_atraso:Q", title="Atraso", format=".1%"),
-                     alt.Tooltip("pedidos:Q", title="Pedidos", format=","),
-                     alt.Tooltip("nota_media:Q", title="Nota média", format=".2f")],
+            color=alt.Color(f"{campo}:Q", scale=escala,
+                            legend=alt.Legend(title=titulo, format=".0%", orient="bottom", gradientLength=220,
+                                              titleLimit=320)),
+            # Com um estado escolhido, os outros perdem força em vez de sumir. O mapa continua dando o contexto.
+            opacity=alt.condition(visivel, alt.value(1), alt.value(0.3)),
+            stroke=alt.condition(destacado, alt.value(TINTA), alt.value("#ffffff")),
+            strokeWidth=alt.condition(destacado, alt.value(2), alt.value(1)),
+            tooltip=[alt.Tooltip("estado:N", title="Estado"), alt.Tooltip(f"{campo}:Q", title=titulo, format=".1%"),
+                     alt.Tooltip("pedidos:Q", title="Pedidos", format=",")],
         )
+        .add_params(clique)
     )
-    return (fundo + dados).project("mercator").properties(height=altura)
+    # Sigla branca sobre os laranjas escuros e preta sobre os claros. No mar, sempre preta.
+    rotulos = siglas_estados().merge(estados[["estado", campo]], on="estado", how="left")
+    corte = rotulos[campo].quantile(0.6)
+    rotulos["clara"] = ~rotulos.no_mar & (rotulos[campo] >= corte)
+    rotulos["visivel"] = (rotulos.estado == uf) if uf else True
+    # A linha termina no ponto do mar e a sigla fica um pouco à direita dela, para a linha não riscar a letra.
+    rotulos["lon_sigla"] = rotulos.lon_t + rotulos.no_mar * 1.3
+    linhas = alt.Chart(rotulos).transform_filter("datum.no_mar").mark_rule(color=CINZA, strokeWidth=0.8).encode(
+        longitude="lon:Q", latitude="lat:Q", longitude2="lon_t:Q", latitude2="lat_t:Q")
+    siglas = alt.Chart(rotulos).mark_text(fontSize=10, fontWeight=600, cursor="pointer").encode(
+        longitude="lon_sigla:Q", latitude="lat_t:Q", text="estado:N",
+        color=alt.condition("datum.clara", alt.value("#ffffff"), alt.value(TINTA)),
+        opacity=alt.condition("datum.visivel", alt.value(1), alt.value(0.35)),
+        tooltip=[alt.Tooltip("estado:N", title="Estado")],
+    # Uma seleção própria na sigla, porque clicar em cima das letras também precisa escolher o estado.
+    # O Vega não aceita a mesma seleção em duas camadas ("Duplicate signal name"), então são duas.
+    ).add_params(alt.selection_point(name="uf_sigla", fields=["estado"], on="click"))
+    return alt.layer(fundo, dados, linhas, siglas).project("mercator").properties(height=altura)
+
+
+# ------------------------------------------------------------------ filtro por estado
+# O estado escolhido vive em st.session_state["filtro_uf"] e vale em todas as páginas que filtram.
+# O clique no gráfico e a caixa de seleção escrevem no mesmo lugar, então os dois sempre mostram o mesmo estado.
+BRASIL = "Brasil inteiro"
+
+
+def estado_escolhido() -> str | None:
+    return st.session_state.get("filtro_uf")
+
+
+def escolher_estado(uf: str | None):
+    st.session_state["filtro_uf"] = uf
+    st.session_state["seletor_uf"] = uf or BRASIL
+
+
+def desenhar_clicavel(grafico, chave: str, parametros: tuple = ("uf", "uf_sigla"), campo: str = "estado"):
+    """Desenha um gráfico em que o clique escolhe o estado do filtro. Lê a primeira seleção marcada."""
+    # A chave muda com o estado escolhido. Assim a seleção interna do gráfico zera quando o filtro muda pela caixa,
+    # e clicar no mesmo estado depois de voltar ao Brasil inteiro ainda funciona.
+    chave = f"{chave}-{estado_escolhido()}"
+
+    def ao_clicar():
+        selecao = st.session_state[chave].selection
+        marcados = [m for p in parametros for m in selecao.get(p, [])]
+        escolher_estado(marcados[0][campo] if marcados else None)
+
+    # O Altair sobe as seleções das camadas para o topo do gráfico. Só as que existem entram no selection_mode.
+    presentes = [p["name"] for p in grafico.to_dict().get("params", [])]
+    st.altair_chart(grafico, width="stretch", theme=None, key=chave, on_select=ao_clicar,
+                    selection_mode=[p for p in parametros if p in presentes])
+
+
+def barra_de_filtro(pedidos_por_estado: pd.Series, base: str) -> str | None:
+    """Caixa de seleção do estado, para quem usa teclado, e a frase que diz o que está filtrado."""
+    st.session_state.setdefault("seletor_uf", estado_escolhido() or BRASIL)
+
+    def trocar():
+        valor = st.session_state["seletor_uf"]
+        st.session_state["filtro_uf"] = None if valor == BRASIL else valor
+
+    caixa, botao, frase = st.columns([2, 2, 8], vertical_alignment="bottom")
+    caixa.selectbox("Estado", [BRASIL] + sorted(pedidos_por_estado.index), key="seletor_uf", on_change=trocar)
+    uf = estado_escolhido()
+    if uf:
+        botao.button("Ver Brasil inteiro", on_click=escolher_estado, args=(None,), width="stretch")
+        n = int(pedidos_por_estado.get(uf, 0))
+        aviso = " Amostra pequena, leia com cuidado." if n < 300 else ""
+        frase.caption(f"Filtrando {uf}, com {num(n)} {base}.{aviso}")
+    else:
+        frase.caption("Clique num estado do mapa ou escolha na lista para filtrar a página.")
+    return uf
 
 
 def conclusao(texto: str):

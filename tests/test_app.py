@@ -86,3 +86,36 @@ def test_logistica_cita_os_vendedores_da_comparacao(monkeypatch):
     at = AppTest.from_file(str(APP / "pages/2_Logistica.py"), default_timeout=30).run()
     assert not at.exception
     assert any(f"{n} vendedores" in c.value for c in at.caption)
+
+
+# ------------------------------------------------------------ filtros por clique
+# Cada página abre com estado, mês, faixa e dia escolhidos, inclusive valores que não existem mais
+# (um filtro guardado de outra sessão). Clique nenhum pode quebrar uma página.
+FILTROS = [
+    {"filtro_uf": "AL"},
+    {"filtro_uf": "RR"},  # 40 pedidos, testa grupo vazio e amostra pequena
+    {"filtro_uf": "SP", "filtro_faixa": "3. 1 a 3 dias de atraso", "filtro_mes": "2018-03", "filtro_dia": 2},
+    {"filtro_faixa": "faixa velha", "filtro_mes": "1999-01", "filtro_dia": 999},
+]
+
+
+@pytest.mark.parametrize("filtros", FILTROS, ids=["AL", "RR", "SP-com-tudo", "valores-velhos"])
+@pytest.mark.parametrize("pagina", PAGINAS)
+def test_pagina_abre_com_filtros(pagina, filtros, monkeypatch):
+    monkeypatch.syspath_prepend(str(APP))
+    at = AppTest.from_file(str(APP / pagina), default_timeout=30)
+    for chave, valor in filtros.items():
+        at.session_state[chave] = valor
+    at.run()
+    assert not at.exception, at.exception
+
+
+def test_visao_geral_sem_filtro_bate_com_o_resumo(monkeypatch):
+    # Os cartões agora somam a tabela por estado. Sem filtro, precisam dar os números do Brasil já conferidos.
+    monkeypatch.syspath_prepend(str(APP))
+    from dados import pct, resumo
+    r = resumo()
+    valores = [m.value for m in AppTest.from_file(str(APP / "visao_geral.py"), default_timeout=30).run().metric]
+    assert valores[0] == pct(r.pct_atrasados)
+    assert valores[1] == pct(r.parcela_notas_baixas_atraso)
+    assert valores[3] == pct(r.pct_recompra)
