@@ -8,7 +8,7 @@ A resposta curta é o atraso na entrega. Só 6,7% dos pedidos chegam atrasados, 
 
 Peguei cerca de 100 mil pedidos reais da [Olist](https://github.com/olist/work-at-olist-data), um marketplace brasileiro, e fiz o caminho inteiro de quem trabalha com dado. Baixei os arquivos, tratei, modelei no PostgreSQL, refiz o pipeline no Databricks, conferi uma camada contra a outra e publiquei um painel que abre com um clique.
 
-**[Abrir o painel](LINK_DO_PAINEL)**
+**[Abrir o painel](https://projeto-logistica.streamlit.app/)**
 
 ![Painel, página Visão geral](resultados/painel_visao_geral.jpg)
 
