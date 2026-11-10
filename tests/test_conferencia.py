@@ -7,6 +7,7 @@ Os testes que precisam do banco consultam o container olist-db. Sem o container
 O job do pipeline SQL sobe o banco e roda esta conferência.
 """
 
+import io
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,7 +15,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-DADOS = Path(__file__).resolve().parents[1] / "app" / "data"
+RAIZ = Path(__file__).resolve().parents[1]
+DADOS = RAIZ / "app" / "data"
 
 
 def ler(nome):
@@ -28,6 +30,23 @@ def postgres(sql):
         capture_output=True, text=True, check=True,
     ).stdout
     return [linha.split("|") for linha in saida.strip().splitlines()]
+
+
+def analise_pg(arquivo):
+    """Roda um arquivo de sql/analises no container e devolve o resultado com cabeçalho.
+
+    O arquivo vai pelo stdin porque o container não enxerga a pasta do repositório.
+    O psql escreve booleano como t/f no CSV. true_values e false_values convertem,
+    senão pg[pg.atrasado] filtraria texto em vez de booleano.
+    """
+    saida = subprocess.run(
+        ["docker", "exec", "-i", "olist-db", "psql", "-U", "postgres", "-d", "olist", "--csv", "-v", "ON_ERROR_STOP=1", "-f", "-"],
+        input=(RAIZ / "sql" / "analises" / arquivo).read_text(encoding="utf-8"),
+        # UTF-8 explícito. No Windows o padrão é cp1252, os acentos dos comentários chegam
+        # corrompidos e o psql descarta a consulta. ON_ERROR_STOP faz esse erro virar falha.
+        capture_output=True, text=True, encoding="utf-8", check=True,
+    ).stdout
+    return pd.read_csv(io.StringIO(saida), true_values=["t"], false_values=["f"])
 
 
 def banco_disponivel():
@@ -99,3 +118,43 @@ def test_kpis_mensais_batem_mes_a_mes():
 def test_pedidos_entregues_batem_com_a_visao():
     (n,) = postgres("SELECT COUNT(*) FROM dw.vw_pedidos_entregues")[0]
     assert ler("entrega_por_estado").pedidos.sum() == int(n)
+
+
+# ------------------------------------------------------------ análises dos achados do relatório
+# Controles de cada análise SQL nova contra as tabelas que já foram conferidas.
+# Se uma base sair diferente (pedido a mais, avaliado a menos), o erro aparece aqui antes de virar gráfico.
+
+@precisa_banco
+def test_analise_07_soma_os_avaliados_das_faixas():
+    pg = analise_pg("07_nota_por_dia_atraso.sql")
+    assert pg.pedidos.sum() == ler("nota_por_faixa").pedidos.sum()  # 95.560
+
+
+@precisa_banco
+def test_analise_08_soma_os_entregues():
+    assert analise_pg("08_entrega_por_regiao.sql").pedidos.sum() == ler("entrega_por_estado").pedidos.sum()  # 96.203
+
+
+@precisa_banco
+def test_analise_09_atrasados_batem_com_o_resumo():
+    pg = analise_pg("09_nota_por_regiao_atraso.sql")
+    assert pg.pedidos.sum() == 95560
+    assert pg[pg.atrasado].pedidos.sum() / pg.pedidos.sum() == pytest.approx(ler("resumo").pct_atrasados.iloc[0])
+
+
+@precisa_banco
+def test_analise_10_nao_passa_dos_pedidos_do_estado():
+    # Só pedidos de vendedor único entram. Na exploração, 1.272 de 96.203 entregues tinham mais de um,
+    # então cada estado perde pouco. Mais de 3% de perda indica regra de vendedor errada.
+    pg = analise_pg("10_atraso_vendedor_destino.sql")
+    por_estado = ler("entrega_por_estado").set_index("estado").pedidos
+    assert set(pg.estado) == {"RJ", "SP", "MG", "ES"}
+    for uf, n in pg.groupby("estado").pedidos.sum().items():
+        assert 0.97 * por_estado[uf] <= n <= por_estado[uf]
+
+
+@precisa_banco
+def test_analise_11_pessoas_dentro_do_total():
+    pg = analise_pg("11_recompra_primeira_compra.sql")
+    assert pg.pessoas.sum() <= ler("resumo").clientes_total.iloc[0]
+    assert (pg.voltaram < pg.pessoas).all()
