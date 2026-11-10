@@ -182,7 +182,7 @@ Toda regra abaixo está no código e você precisa saber o porquê de cada uma.
 
 ### 7.6 Análises em SQL
 
-Seis consultas em `sql/analises/`, cada uma responde uma pergunta.
+Treze consultas em `sql/analises/`, cada uma responde uma pergunta. As sete últimas sustentam os achados do relatório e o filtro por estado do painel, e têm uma tabela gêmea na camada ouro.
 
 | Arquivo | Pergunta | Técnica principal |
 |---|---|---|
@@ -192,6 +192,15 @@ Seis consultas em `sql/analises/`, cada uma responde uma pergunta.
 | `04_rfm_segmentos.sql` | Como segmentar para CRM? | `NTILE` |
 | `05_atraso_vs_avaliacao.sql` | O atraso derruba a nota? | agregação condicional |
 | `06_atraso_por_estado.sql` | Onde agir primeiro? | `RANK`, `HAVING` |
+| `07_nota_por_dia_atraso.sql` | A partir de que dia de atraso a nota despenca? | `FILTER`, contagem por valor exato |
+| `08_entrega_por_regiao.sql` | A entrega é menos previsível em alguma região? | `percentile_cont` |
+| `09_nota_por_regiao_atraso.sql` | A nota baixa vem da região ou do atraso? | estratificação |
+| `10_atraso_vendedor_destino.sql` | O RJ atrasa pelo vendedor ou pela rota? | CTE com `HAVING COUNT(DISTINCT)`, comparação pareada |
+| `11_recompra_primeira_compra.sql` | Quem teve a primeira compra atrasada volta menos? | `DISTINCT ON` com desempate |
+| `12_faixa_por_estado.sql` | Como a nota cai por faixa de atraso em cada estado? | contagens e somas por estado e faixa, sem taxa pronta |
+| `13_recompra_por_estado.sql` | Qual a recompra em cada estado? | pessoas e quem voltou, pelo endereço mais recente |
+
+Os números que o relatório cita sobre esses achados saem de `py -3.12 analise/achados_relatorio.py`, que lê os Parquet já conferidos e diz se cada achado passou no critério combinado antes da análise.
 
 **Você aprende.** Window functions, que são o assunto de SQL que mais aparece em teste técnico.
 
@@ -225,6 +234,8 @@ Seis consultas em `sql/analises/`, cada uma responde uma pergunta.
 
 **Por que existe.** Duas fontes que deveriam ser iguais e não foram conferidas são duas fontes de erro. A conferência prova que o pipeline da nuvem está certo.
 
+As sete tabelas do relatório e do filtro por estado são conferidas linha a linha contra as análises `07` a `13`, depois de ordenar os dois lados pelo grão. Contagem tem que ser igual e percentil ou soma só pode diferir por arredondamento de ponto flutuante.
+
 **Você aprende.** Formato colunar, reconciliação de dados, teste automatizado comparando fontes.
 
 ### 7.10 Painel em Streamlit
@@ -238,6 +249,9 @@ Seis consultas em `sql/analises/`, cada uma responde uma pergunta.
 | Logística | Onde a entrega falha? | atraso por estado, folga entre prometido e real, frete por região |
 | Cliente | O atraso derruba a nota? | nota por faixa de atraso e o resultado do teste de hipótese |
 | Recomendações | O que fazer primeiro? | as 4 ações com o número que sustenta cada uma |
+| Relatório | Quanto dá para confiar nos achados? | atraso e nota por mês e por estado, impacto de cada ação, tamanho do teste A/B e a base de cada número |
+
+**Como os gráficos se filtram.** Clicar num estado (mapa da Visão geral e da Logística, ranking da Logística, dispersão do Relatório ou a sigla no mar) filtra os cartões e as faixas da Visão geral, da Logística e do Cliente, e o estado vale em todas as páginas até clicar em "Ver Brasil inteiro". Clicar num mês (Vendas e Relatório), numa faixa (Visão geral), numa região (Logística) ou num dia (Cliente) destaca o recorte e deixa o resto apagado, porque tendência com barras removidas deixa de ser tendência. Clicar de novo no item já escolhido desfaz o filtro, e os botões de reset continuam para quem usa teclado. A página Vendas continua no Brasil inteiro, já que a receita não está separada por estado na camada ouro, e a página diz isso quando há estado escolhido.
 
 **Por que cada página termina com uma conclusão.** Gráfico sem conclusão obriga o leitor a fazer a análise. Quem contrata analista quer quem entrega a conclusão.
 
@@ -276,16 +290,21 @@ Estes números vêm do pipeline local e do teste de hipótese, e o painel precis
 - A receita mensal cresceu cerca de 6 vezes em 2017 e estabilizou perto de R$ 900 mil por mês em 2018.
 - Só 3,0% dos clientes compraram mais de uma vez.
 - 18 de 74 categorias somam 81% da receita.
-- 6,8% dos pedidos chegam atrasados, mas respondem por 32,6% das notas 1 e 2.
+- 6,7% dos pedidos entregues e avaliados chegam atrasados (6,8% de todos os entregues), mas respondem por 32,6% das notas 1 e 2.
 - A nota média cai de 4,29 no prazo para 2,27 com atraso. Pedido atrasado tem 6,7 vezes mais chance de nota baixa.
 - O RJ tem 12,8% dos pedidos e 22,9% dos atrasos. O Nordeste tem a pior taxa de atraso, 12,8%, contra 4,5% em SP.
 - Em média, o pedido chega 11,8 dias antes do prazo prometido.
+- A nota baixa vai de 12,4% no dia prometido para 19,7% com 1 dia de atraso, 34,3% com 2 e 50,4% com 3.
+- O mesmo vendedor atrasa em média 12,2% dos pedidos para o RJ e 4,4% para SP (124 vendedores, Wilcoxon p = 5,5e-15). O resultado se mantém com vendedores só de SP comparando RJ e MG e com vendedores de fora dos dois estados. O atraso do RJ vem do caminho, não do vendedor.
+- Entre os 80% de pedidos do meio, a entrega no Nordeste varia 27 dias e no Sudeste 19. O Nordeste é a única região em que o p90 passa do dia prometido.
+- Dentro de cada situação a região quase não muda a nota. No prazo, de 4,20 a 4,30. Atrasado, de 2,14 a 2,37.
+- Quem teve a primeira compra atrasada volta um pouco menos, 2,5% contra 3,1% (p = 0,021). Achado secundário, com a ressalva de que quem comprou no fim da janela teve menos tempo para voltar.
 
 ## 9. Recomendações de negócio
 
-1. Atacar o atraso no RJ primeiro.
+1. Rever a entrega até o cliente no RJ (transportadora, rota, última milha), porque o vendedor foi descartado como causa.
 2. Prometer prazo por região, e não um prazo nacional.
-3. Avisar o cliente antes de atrasar, testando com experimento A/B.
+3. Avisar o cliente antes do primeiro dia de atraso, testando com experimento A/B.
 4. Criar um programa de segunda compra para os cerca de 14 mil clientes de alto valor que não voltaram.
 
 ## 10. Como saber que deu certo
@@ -390,3 +409,26 @@ Toda decisão relevante entra aqui, com data e motivo. É a memória do projeto 
 | 09/11/2026 | Mapa em duas camadas, Brasil em cinza por baixo | O Vega apaga o polígono que não tem valor no campo da cor. Com o filtro de pedidos mínimos, os estados pequenos sumiam e o mapa ficava com buracos |
 | 09/11/2026 | Conclusões do painel calculadas a partir dos dados | A primeira versão dizia que o atraso se concentra no Norte. O Norte atrasa 8,6% e o Nordeste 12,8%, contra 6,7% na média. Texto gerado dos números não diverge deles |
 | 09/11/2026 | PRs sempre com base na `main`, sem empilhar | Com PRs empilhados, o merge com `--delete-branch` apagou a branch de base e o GitHub fechou os PRs seguintes em vez de trocar a base. Foram reabertos como #34, #35 e #36 |
+| 10/11/2026 | Relatório formal em `resultados/relatorio.md` e página Relatório no painel | O painel mostra a conclusão, o relatório mostra a metodologia, a conferência e as limitações. É o que separa análise de gráfico bonito |
+| 10/11/2026 | A base de cada número fica escrita no painel e no relatório | O atraso aparece como 6,7% (entregues e avaliados) e 6,8% (todos os entregues). Os dois estão certos, mas sem a base escrita parecem erro |
+| 10/11/2026 | A correlação mensal sai com a ressalva dos meses de crise | Com os 20 meses ela é -0,87. Sem nov/17, fev/18 e mar/18 cai para -0,44 e deixa de ser significativa. Esconder isso venderia uma prova mais forte do que ela é |
+| 10/11/2026 | Tamanho de amostra do A/B calculado com `statistics.NormalDist` | A biblioteca padrão já tem a normal inversa, então a página não precisa do SciPy para isso |
+| 10/11/2026 | Tabela por vendedor só com pedidos de vendedor único | Pedido com dois vendedores não tem um responsável só pelo atraso. São 1.272 de 96.203 entregues, menos de 3% em cada estado comparado. O controle conta vendedores distintos, porque contar itens tiraria pedidos de um vendedor só com vários itens |
+| 10/11/2026 | Vendedor só entra na comparação com 20 ou mais pedidos em cada destino | Com 3 pedidos, uma entrega atrasada vira 33% e domina a média. O corte deixa 124 vendedores na comparação RJ contra SP |
+| 10/11/2026 | Percentil exato (`percentile` no Spark, `percentile_cont` no Postgres) | `percentile_approx` é mais rápido em dado grande, mas dá valores próximos e não iguais, e a conferência linha a linha pararia. Com 96 mil pedidos o exato custa pouco |
+| 10/11/2026 | Primeira compra desempatada por `pedido_id` | Duas compras da mesma pessoa no mesmo segundo deixariam a escolha da primeira ao acaso, e Spark e Postgres poderiam escolher pedidos diferentes |
+| 10/11/2026 | Análise SQL enviada ao container com UTF-8 explícito e `ON_ERROR_STOP` | No Windows o Python enviava o arquivo em cp1252, os acentos dos comentários chegavam corrompidos e o psql descartava a consulta, devolvendo vazio sem erro. O teste mostrava `EmptyDataError` em vez da causa |
+| 10/11/2026 | Critérios dos achados novos combinados antes de ler os números finais | Escolher o critério depois de ver o resultado é ajustar a régua ao que se quer provar. Os dois critérios estão no topo de `analise/achados_relatorio.py` |
+| 10/11/2026 | Análise 11 com window functions numa passada só, e limite de 60 segundos por consulta na conferência | A versão anterior juntava uma CTE com ela mesma. No banco recém-criado do CI, sem ANALYZE, o Postgres estimou 200 linhas de cada lado e escolheu um laço aninhado de bilhões de comparações, e o job ficou preso por mais de 20 minutos. No banco local o autovacuum já tinha coletado estatísticas e a consulta levava menos de 1 segundo |
+| 10/11/2026 | Painel de folga da Logística trocado pela faixa de entrega por região (p10 a p90) | A folga média do Nordeste é igual à do Sudeste e escondia a diferença. A faixa mostra que a entrega no Nordeste é menos previsível, que é o que explica o atraso maior |
+| 10/11/2026 | Recomendação 1 passou de "atacar o atraso no RJ" para "rever a entrega até o cliente no RJ" | A comparação pelo mesmo vendedor mostrou que o atraso do RJ não vem de quem vende. Cobrar o vendedor seria agir no lugar errado |
+| 10/11/2026 | Hipótese de atrasos mais longos nos meses de crise continua aberta | O único número que existe veio da exploração nos CSVs, sem tabela conferida na camada ouro. Número sem conferência não entra no relatório como conclusão |
+| 10/11/2026 | Filtro por estado com duas tabelas novas na camada ouro (`faixa_por_estado`, `recompra_por_estado`) | Guardam contagens e somas por estado, então o painel soma qualquer grupo sem fazer média de médias. Somadas, fecham com `nota_por_faixa` e com o resumo, e são conferidas linha a linha contra as análises `12` e `13` |
+| 10/11/2026 | Clique em mês, dia, faixa ou região destaca e não remove os outros | Série que perde as barras ao filtrar deixa de mostrar tendência. O recorte fica aceso e o resto continua à vista, apagado |
+| 10/11/2026 | O gráfico de vendedores fica fixo no RJ contra SP | A comparação pelo mesmo vendedor é o achado do RJ e não muda com o estado escolhido. Quando o estado é outro, uma legenda diz isso, em vez de refazer a conta com 13 vendedores no ES |
+| 10/11/2026 | O estado escolhido fica na Logística mesmo abaixo do mínimo de 300 pedidos, com aviso de amostra pequena | Clicar num estado e vê-lo sumir por causa de um controle ao lado seria pior que o aviso |
+| 10/11/2026 | Mapa com dois parâmetros de seleção, `uf` nos polígonos e `uf_sigla` nas siglas | Um parâmetro só, em duas camadas com dados diferentes, fazia o Vega acusar `Duplicate signal name: uf_tuple` e o gráfico não abria |
+| 10/11/2026 | Parquet gerado do Postgres serve só para testar o painel local e nunca entra no Git | O painel lê a camada ouro do Databricks. Os dois arquivos novos entraram só depois de rodar o notebook, e foram comparados com o Postgres, que deu o mesmo resultado nas 131 e nas 27 linhas |
+| 10/11/2026 | Segundo clique no item escolhido desfaz o filtro, com a regra numa função só (`alternar`) | Ir até outro cartão para clicar em "Ver Brasil inteiro" quebrava o fluxo de quem explora o mapa. A chave de cada gráfico já muda com o filtro, então o segundo clique chega como um clique novo e a função o transforma em limpar. Os botões ficam por acessibilidade |
+| 10/11/2026 | Mapa da Logística pode ser pintado pelo volume de pedidos entregues, em azul e com escala de raiz quadrada | Mostra onde o volume se concentra, o que explica por que o mesmo percentual de atraso pesa mais no RJ que no AL. Linear deixava quase todo o mapa claro, porque SP tem 40.403 pedidos e RR tem 46. Azul porque laranja é só atraso. O rótulo diz "pedidos entregues", já que contar todos os status daria 41.746 em SP e não bateria com o resto do painel |
+| 10/11/2026 | Visual do painel num arquivo só (`app/estilo.css`), no estilo moldura e folha, com Bricolage Grotesque nos títulos e números | Antes o CSS morava em `Home.py`, em 7 linhas, e a página ficava numa coluna de 1.200 px. Agora a folha branca usa a tela de 1920 px (até 1.840 px), os blocos são um passo de tom acima da folha, sem sombra, e os indicadores viram uma faixa só dividida por linhas finas. As páginas não mudaram de lógica: o CSS mira nos `data-testid` do Streamlit, então todas herdam. O número que responde ao título da Visão geral (nota média com atraso, 2,27) abre a faixa e é o maior. A lista de estados ao lado do mapa exige 300 pedidos ou mais, o mesmo corte do aviso de amostra pequena, porque RR com 46 pedidos apareceria no topo por acaso. Nome e LinkedIn do autor ficam no rodapé e abaixo do título da Visão geral |
