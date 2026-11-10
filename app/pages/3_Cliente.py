@@ -1,6 +1,7 @@
 """Cliente. O atraso derruba a nota?"""
 
 import altair as alt
+import pandas as pd
 import streamlit as st
 
 from dados import AZUL, DESTAQUE, conclusao, desenhar, ler, num, painel, pct, ponderada, resumo, rodape
@@ -39,6 +40,32 @@ with painel("Nota por faixa de atraso", "nota-faixa", "Azul chegou no prazo, lar
     valores = base.mark_text(align="left", dx=6, fontSize=14, fontWeight=700, color="#0a0a0a").encode(
         text=alt.Text(f"{coluna}:Q", format=".2f" if coluna == "nota_media" else ".1%"))
     desenhar((barras + valores).properties(height=300))
+
+# Curva dia a dia. As faixas acima juntam 1 a 3 dias de atraso, e é justamente aí que a nota despenca.
+dias = ler("nota_por_dia_atraso").query("-10 <= dias_atraso <= 15").assign(
+    taxa=lambda d: d.notas_baixas / d.pedidos, atrasado=lambda d: d.dias_atraso >= 1)
+taxa_dia = dias.set_index("dias_atraso").taxa
+with painel("A nota despenca já nos primeiros dias de atraso", "nota-dia",
+            f"Parcela de notas 1 e 2 por dia em relação à data prometida. No dia prometido é {pct(taxa_dia[0])}. "
+            f"Com 1 dia de atraso sobe para {pct(taxa_dia[1])}, com 2 dias para {pct(taxa_dia[2])} e com 3 dias "
+            f"para {pct(taxa_dia[3])}."):
+    eixo_x = alt.X("dias_atraso:Q", title="Dias em relação à data prometida (negativo é adiantado)",
+                   scale=alt.Scale(domain=[-10, 15]), axis=alt.Axis(tickCount=13, format="d"))
+    eixo_y = alt.Y("taxa:Q", title="Notas 1 e 2", axis=alt.Axis(format=".0%", tickCount=5))
+    dica = [alt.Tooltip("dias_atraso", title="Dias"), alt.Tooltip("pedidos", title="Pedidos avaliados", format=","),
+            alt.Tooltip("taxa", title="Notas 1 e 2", format=".1%")]
+    linha = lambda dados, cor: alt.Chart(dados).mark_line(color=cor, strokeWidth=2.5, point=alt.OverlayMarkDef(
+        color=cor, size=36)).encode(x=eixo_x, y=eixo_y, tooltip=dica)
+    # O trecho atrasado começa no dia 0 para a linha não ter buraco entre as duas cores.
+    prometido = alt.Chart(pd.DataFrame({"x": [0]}))
+    desenhar((linha(dias[~dias.atrasado], AZUL) + linha(dias[dias.dias_atraso >= 0], DESTAQUE)
+              + prometido.mark_rule(color="#a3a8b0", strokeDash=[4, 3]).encode(x="x:Q")
+              + prometido.mark_text(text="dia prometido", align="left", dx=4, color="#5f6672", fontSize=11)
+              .encode(x="x:Q", y=alt.value(12))).properties(height=300))
+    # Patamar somando pedidos e notas baixas, não média das taxas, porque cada dia tem um número de pedidos diferente.
+    semana = dias[dias.dias_atraso.between(7, 15)]
+    st.caption(f"De 7 a 15 dias de atraso, {pct(semana.notas_baixas.sum() / semana.pedidos.sum())} das avaliações são "
+               "nota 1 ou 2. O estrago acontece nos três primeiros dias, então o aviso ao cliente precisa sair antes disso.")
 
 with painel("Teste de hipótese", "hipotese"):
     st.markdown(

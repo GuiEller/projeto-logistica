@@ -56,6 +56,7 @@ conclusao(
     f"Só {pct(r.pct_atrasados)} dos pedidos atrasam, mas eles respondem por {pct(r.parcela_notas_baixas_atraso)} "
     f"de todas as notas 1 e 2. A nota média cai de {num(nota_prazo, 2)} para {num(nota_atraso, 2)} quando o pedido "
     f"atrasa. O Nordeste atrasa {pct(nordeste)} das entregas, quase o dobro da média, e o RJ junta muito volume "
-    "com atraso alto. As páginas seguintes mostram onde agir primeiro."
+    "com atraso alto. No RJ o problema é o caminho até o cliente, porque o mesmo vendedor atrasa bem menos para SP. "
+    "As páginas seguintes mostram onde agir primeiro."
 )
 rodape()
