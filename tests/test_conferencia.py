@@ -26,6 +26,8 @@ TABELAS_DO_RELATORIO = {
     "nota_por_regiao_atraso": ("09_nota_por_regiao_atraso.sql", ["regiao", "atrasado"]),
     "atraso_vendedor_destino": ("10_atraso_vendedor_destino.sql", ["vendedor_id", "estado"]),
     "recompra_primeira_compra": ("11_recompra_primeira_compra.sql", ["primeira_atrasada"]),
+    "faixa_por_estado": ("12_faixa_por_estado.sql", ["estado", "faixa_atraso"]),
+    "recompra_por_estado": ("13_recompra_por_estado.sql", ["estado"]),
 }
 
 
@@ -231,3 +233,31 @@ def test_atraso_vendedor_destino_bate_com_o_postgres():
 @precisa_banco
 def test_recompra_primeira_compra_bate_com_o_postgres():
     conferir_com_o_postgres("recompra_primeira_compra")
+
+
+# ------------------------------------------------------------ filtro por estado do painel
+# Somadas por estado, as tabelas novas precisam dar os números do Brasil que já foram conferidos.
+
+@precisa_banco
+def test_faixa_por_estado_bate_com_o_postgres():
+    conferir_com_o_postgres("faixa_por_estado")
+
+
+@precisa_banco
+def test_recompra_por_estado_bate_com_o_postgres():
+    conferir_com_o_postgres("recompra_por_estado")
+
+
+@precisa_banco
+def test_analise_12_soma_as_faixas_do_brasil():
+    pg = analise_pg("12_faixa_por_estado.sql").groupby("faixa_atraso")[["pedidos", "notas_baixas"]].sum()
+    faixa = ler("nota_por_faixa").set_index("faixa_atraso")
+    assert pg.pedidos.to_dict() == faixa.pedidos.to_dict()
+    assert pg.notas_baixas.to_dict() == (faixa.pedidos * faixa.pct_nota_baixa).round().astype(int).to_dict()
+
+
+@precisa_banco
+def test_analise_13_recompra_fecha_com_o_resumo():
+    pg = analise_pg("13_recompra_por_estado.sql")
+    assert pg.voltaram.sum() / pg.clientes.sum() == pytest.approx(ler("resumo").pct_recompra.iloc[0])
+    assert pg.clientes.sum() <= ler("resumo").clientes_total.iloc[0]

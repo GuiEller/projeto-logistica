@@ -182,7 +182,7 @@ Toda regra abaixo está no código e você precisa saber o porquê de cada uma.
 
 ### 7.6 Análises em SQL
 
-Onze consultas em `sql/analises/`, cada uma responde uma pergunta. As cinco últimas sustentam os achados do relatório e têm uma tabela gêmea na camada ouro.
+Treze consultas em `sql/analises/`, cada uma responde uma pergunta. As sete últimas sustentam os achados do relatório e o filtro por estado do painel, e têm uma tabela gêmea na camada ouro.
 
 | Arquivo | Pergunta | Técnica principal |
 |---|---|---|
@@ -197,6 +197,8 @@ Onze consultas em `sql/analises/`, cada uma responde uma pergunta. As cinco últ
 | `09_nota_por_regiao_atraso.sql` | A nota baixa vem da região ou do atraso? | estratificação |
 | `10_atraso_vendedor_destino.sql` | O RJ atrasa pelo vendedor ou pela rota? | CTE com `HAVING COUNT(DISTINCT)`, comparação pareada |
 | `11_recompra_primeira_compra.sql` | Quem teve a primeira compra atrasada volta menos? | `DISTINCT ON` com desempate |
+| `12_faixa_por_estado.sql` | Como a nota cai por faixa de atraso em cada estado? | contagens e somas por estado e faixa, sem taxa pronta |
+| `13_recompra_por_estado.sql` | Qual a recompra em cada estado? | pessoas e quem voltou, pelo endereço mais recente |
 
 Os números que o relatório cita sobre esses achados saem de `py -3.12 analise/achados_relatorio.py`, que lê os Parquet já conferidos e diz se cada achado passou no critério combinado antes da análise.
 
@@ -232,7 +234,7 @@ Os números que o relatório cita sobre esses achados saem de `py -3.12 analise/
 
 **Por que existe.** Duas fontes que deveriam ser iguais e não foram conferidas são duas fontes de erro. A conferência prova que o pipeline da nuvem está certo.
 
-As cinco tabelas do relatório são conferidas linha a linha contra as análises `07` a `11`, depois de ordenar os dois lados pelo grão. Contagem tem que ser igual e percentil ou soma só pode diferir por arredondamento de ponto flutuante.
+As sete tabelas do relatório e do filtro por estado são conferidas linha a linha contra as análises `07` a `13`, depois de ordenar os dois lados pelo grão. Contagem tem que ser igual e percentil ou soma só pode diferir por arredondamento de ponto flutuante.
 
 **Você aprende.** Formato colunar, reconciliação de dados, teste automatizado comparando fontes.
 
@@ -248,6 +250,8 @@ As cinco tabelas do relatório são conferidas linha a linha contra as análises
 | Cliente | O atraso derruba a nota? | nota por faixa de atraso e o resultado do teste de hipótese |
 | Recomendações | O que fazer primeiro? | as 4 ações com o número que sustenta cada uma |
 | Relatório | Quanto dá para confiar nos achados? | atraso e nota por mês e por estado, impacto de cada ação, tamanho do teste A/B e a base de cada número |
+
+**Como os gráficos se filtram.** Clicar num estado (mapa da Visão geral e da Logística, ranking da Logística, dispersão do Relatório ou a sigla no mar) filtra os cartões e as faixas da Visão geral, da Logística e do Cliente, e o estado vale em todas as páginas até clicar em "Ver Brasil inteiro". Clicar num mês (Vendas e Relatório), numa faixa (Visão geral), numa região (Logística) ou num dia (Cliente) destaca o recorte e deixa o resto apagado, porque tendência com barras removidas deixa de ser tendência. A página Vendas continua no Brasil inteiro, já que a receita não está separada por estado na camada ouro, e a página diz isso quando há estado escolhido.
 
 **Por que cada página termina com uma conclusão.** Gráfico sem conclusão obriga o leitor a fazer a análise. Quem contrata analista quer quem entrega a conclusão.
 
@@ -405,3 +409,9 @@ Toda decisão relevante entra aqui, com data e motivo. É a memória do projeto 
 | 10/11/2026 | Painel de folga da Logística trocado pela faixa de entrega por região (p10 a p90) | A folga média do Nordeste é igual à do Sudeste e escondia a diferença. A faixa mostra que a entrega no Nordeste é menos previsível, que é o que explica o atraso maior |
 | 10/11/2026 | Recomendação 1 passou de "atacar o atraso no RJ" para "rever a entrega até o cliente no RJ" | A comparação pelo mesmo vendedor mostrou que o atraso do RJ não vem de quem vende. Cobrar o vendedor seria agir no lugar errado |
 | 10/11/2026 | Hipótese de atrasos mais longos nos meses de crise continua aberta | O único número que existe veio da exploração nos CSVs, sem tabela conferida na camada ouro. Número sem conferência não entra no relatório como conclusão |
+| 10/11/2026 | Filtro por estado com duas tabelas novas na camada ouro (`faixa_por_estado`, `recompra_por_estado`) | Guardam contagens e somas por estado, então o painel soma qualquer grupo sem fazer média de médias. Somadas, fecham com `nota_por_faixa` e com o resumo, e são conferidas linha a linha contra as análises `12` e `13` |
+| 10/11/2026 | Clique em mês, dia, faixa ou região destaca e não remove os outros | Série que perde as barras ao filtrar deixa de mostrar tendência. O recorte fica aceso e o resto continua à vista, apagado |
+| 10/11/2026 | O gráfico de vendedores fica fixo no RJ contra SP | A comparação pelo mesmo vendedor é o achado do RJ e não muda com o estado escolhido. Quando o estado é outro, uma legenda diz isso, em vez de refazer a conta com 13 vendedores no ES |
+| 10/11/2026 | O estado escolhido fica na Logística mesmo abaixo do mínimo de 300 pedidos, com aviso de amostra pequena | Clicar num estado e vê-lo sumir por causa de um controle ao lado seria pior que o aviso |
+| 10/11/2026 | Mapa com dois parâmetros de seleção, `uf` nos polígonos e `uf_sigla` nas siglas | Um parâmetro só, em duas camadas com dados diferentes, fazia o Vega acusar `Duplicate signal name: uf_tuple` e o gráfico não abria |
+| 10/11/2026 | Parquet gerado do Postgres serve só para testar o painel local e nunca entra no Git | O painel lê a camada ouro do Databricks. Os dois arquivos novos entraram só depois de rodar o notebook, e foram comparados com o Postgres, que deu o mesmo resultado nas 131 e nas 27 linhas |

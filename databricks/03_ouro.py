@@ -348,6 +348,38 @@ print("Tabelas do relatório ok")
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Tabelas do filtro por estado
+# MAGIC
+# MAGIC Quando alguém clica num estado no painel, os cartões e as faixas passam a mostrar só aquele estado.
+# MAGIC Contagens e somas por estado deixam o painel somar qualquer grupo sem fazer média de médias.
+
+# COMMAND ----------
+
+# 12. Faixa de atraso por estado. Somada nos estados, dá a nota_por_faixa.
+faixa_por_estado = salvar(
+    avaliados.groupBy("estado", "faixa_atraso").agg(*contagens_de_nota).orderBy("estado", "faixa_atraso"),
+    "faixa_por_estado",
+)
+
+# 13. Recompra por estado, com a mesma regra do resumo (venda válida, sem janela) e o estado da pessoa.
+recompra_por_estado = salvar(
+    compras_por_pessoa.join(dim_cliente.select("cliente_id", "estado"), "cliente_id")
+    .groupBy("estado")
+    .agg(F.count("*").alias("clientes"), F.sum((F.col("count") > 1).cast("int")).alias("voltaram"))
+    .orderBy("estado"),
+    "recompra_por_estado",
+)
+
+por_faixa = {r.faixa_atraso: r.pedidos for r in nota_por_faixa.collect()}
+for r in faixa_por_estado.groupBy("faixa_atraso").agg(F.sum("pedidos").alias("n")).collect():
+    assert r.n == por_faixa[r.faixa_atraso], f"faixa_por_estado não fecha com nota_por_faixa em {r.faixa_atraso}"
+total = recompra_por_estado.agg(F.sum("voltaram"), F.sum("clientes")).first()
+assert abs(total[0] / total[1] - resumo.first().pct_recompra) < 1e-12, "recompra_por_estado não fecha com o resumo"
+print("Tabelas do filtro ok")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Databricks SQL
 # MAGIC
 # MAGIC As tabelas da ouro estão no catálogo e podem ser consultadas em SQL puro, aqui ou no SQL Editor.
@@ -375,7 +407,7 @@ from pyspark.sql.types import DecimalType
 
 PAINEL = ["kpis_mensais", "categorias_abc", "entrega_por_estado", "nota_por_faixa", "resumo",
           "nota_por_dia_atraso", "entrega_por_regiao", "nota_por_regiao_atraso", "atraso_vendedor_destino",
-          "recompra_primeira_compra"]
+          "recompra_primeira_compra", "faixa_por_estado", "recompra_por_estado"]
 for nome in PAINEL:
     df = spark.table(f"workspace.ouro.{nome}")
     df = df.select([F.col(c.name).cast("double") if isinstance(c.dataType, DecimalType) else F.col(c.name) for c in df.schema])
