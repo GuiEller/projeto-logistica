@@ -26,4 +26,5 @@ st.navigation([
     st.Page("pages/2_Logistica.py", title="Logística", icon=":material/local_shipping:"),
     st.Page("pages/3_Cliente.py", title="Cliente", icon=":material/star_half:"),
     st.Page("pages/4_Recomendacoes.py", title="Recomendações", icon=":material/task_alt:"),
+    st.Page("pages/5_Relatorio.py", title="Relatório", icon=":material/fact_check:"),
 ], position="top").run()

@@ -32,6 +32,15 @@ def test_filtro_de_estado_vazio_nao_quebra(monkeypatch):
     assert at.warning[0].value == "Nenhum estado com esses filtros."
 
 
+def test_tamanho_amostra_bate_com_a_tabela(monkeypatch):
+    monkeypatch.syspath_prepend(str(APP))
+    from dados import tamanho_amostra
+    # 50% contra 40%, alfa de 5% e poder de 80% dá 388 por grupo nas tabelas de livro (fórmula de Fleiss sem correção).
+    assert tamanho_amostra(0.5, 0.4) == 388
+    # Efeito menor pede amostra maior. Se a fórmula inverter o sinal, este teste pega.
+    assert tamanho_amostra(0.624, 0.574) > tamanho_amostra(0.624, 0.524)
+
+
 def test_menu_abre_na_visao_geral(monkeypatch):
     monkeypatch.syspath_prepend(str(APP))
     at = AppTest.from_file(str(APP / "Home.py"), default_timeout=30).run()

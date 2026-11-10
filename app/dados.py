@@ -1,7 +1,9 @@
 """Leitura dos Parquet da camada ouro, formatação no padrão brasileiro e o visual comum a todas as páginas."""
 
 import json
+import math
 from pathlib import Path
+from statistics import NormalDist
 
 import altair as alt
 import pandas as pd
@@ -102,6 +104,16 @@ def comparar_destinos(tabela: pd.DataFrame, destino_a: str, destino_b: str, mini
         "p_valor": float(p),
         "pares": pares,
     }
+
+
+def tamanho_amostra(p1: float, p2: float, alfa: float = 0.05, poder: float = 0.8) -> int:
+    """Pedidos por grupo para um teste A/B de duas proporções (bilateral) enxergar a diferença entre p1 e p2."""
+    # Fórmula clássica do teste z de duas proporções. NormalDist é da biblioteca padrão, sem dependência nova.
+    # alfa é a chance aceita de ver efeito que não existe. Poder é a chance de ver o efeito quando ele existe.
+    z = NormalDist().inv_cdf
+    media = (p1 + p2) / 2
+    termo = z(1 - alfa / 2) * math.sqrt(2 * media * (1 - media)) + z(poder) * math.sqrt(p1 * (1 - p1) + p2 * (1 - p2))
+    return math.ceil(termo ** 2 / (p1 - p2) ** 2)
 
 
 def num(x, casas=0):
