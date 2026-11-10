@@ -238,6 +238,7 @@ Seis consultas em `sql/analises/`, cada uma responde uma pergunta.
 | Logística | Onde a entrega falha? | atraso por estado, folga entre prometido e real, frete por região |
 | Cliente | O atraso derruba a nota? | nota por faixa de atraso e o resultado do teste de hipótese |
 | Recomendações | O que fazer primeiro? | as 4 ações com o número que sustenta cada uma |
+| Relatório | Quanto dá para confiar nos achados? | atraso e nota por mês e por estado, impacto de cada ação, tamanho do teste A/B e a base de cada número |
 
 **Por que cada página termina com uma conclusão.** Gráfico sem conclusão obriga o leitor a fazer a análise. Quem contrata analista quer quem entrega a conclusão.
 
@@ -276,7 +277,7 @@ Estes números vêm do pipeline local e do teste de hipótese, e o painel precis
 - A receita mensal cresceu cerca de 6 vezes em 2017 e estabilizou perto de R$ 900 mil por mês em 2018.
 - Só 3,0% dos clientes compraram mais de uma vez.
 - 18 de 74 categorias somam 81% da receita.
-- 6,8% dos pedidos chegam atrasados, mas respondem por 32,6% das notas 1 e 2.
+- 6,7% dos pedidos entregues e avaliados chegam atrasados (6,8% de todos os entregues), mas respondem por 32,6% das notas 1 e 2.
 - A nota média cai de 4,29 no prazo para 2,27 com atraso. Pedido atrasado tem 6,7 vezes mais chance de nota baixa.
 - O RJ tem 12,8% dos pedidos e 22,9% dos atrasos. O Nordeste tem a pior taxa de atraso, 12,8%, contra 4,5% em SP.
 - Em média, o pedido chega 11,8 dias antes do prazo prometido.
@@ -376,3 +377,7 @@ Toda decisão relevante entra aqui, com data e motivo. É a memória do projeto 
 | 03/11/2026 | Projeto dividido em duas fases, cada uma com um post no LinkedIn | Mostrar resultado mais cedo. A fase 1 já prova SQL, modelagem e estatística, que são os itens mais pedidos nas vagas |
 | 03/11/2026 | Colunas do `dw` com nomes em português (`vendedor_id`, `produto_id`, `cliente_id`) | A staging espelha o CSV em inglês, e o `dw` é a camada do negócio. A troca de nome deixa claro em que camada cada consulta está |
 | 03/11/2026 | Teste 5 da integridade reescrito para "atraso só existe com data de entrega" | A versão anterior exigia ao mesmo tempo atraso calculado e entrega nula, o que nunca acontece. Era um teste que não podia falhar, e teste que não falha não protege nada |
+| 10/11/2026 | Relatório formal em `resultados/relatorio.md` e página Relatório no painel | O painel mostra a conclusão, o relatório mostra a metodologia, a conferência e as limitações. É o que separa análise de gráfico bonito |
+| 10/11/2026 | A base de cada número fica escrita no painel e no relatório | O atraso aparece como 6,7% (entregues e avaliados) e 6,8% (todos os entregues). Os dois estão certos, mas sem a base escrita parecem erro |
+| 10/11/2026 | A correlação mensal sai com a ressalva dos meses de crise | Com os 20 meses ela é -0,87. Sem nov/17, fev/18 e mar/18 cai para -0,44 e deixa de ser significativa. Esconder isso venderia uma prova mais forte do que ela é |
+| 10/11/2026 | Tamanho de amostra do A/B calculado com `statistics.NormalDist` | A biblioteca padrão já tem a normal inversa, então a página não precisa do SciPy para isso |
