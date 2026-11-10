@@ -19,6 +19,16 @@ RAIZ = Path(__file__).resolve().parents[1]
 DADOS = RAIZ / "app" / "data"
 
 
+# Tabela da camada ouro, análise SQL equivalente e as colunas que formam o grão (uma linha por combinação).
+TABELAS_DO_RELATORIO = {
+    "nota_por_dia_atraso": ("07_nota_por_dia_atraso.sql", ["dias_atraso"]),
+    "entrega_por_regiao": ("08_entrega_por_regiao.sql", ["regiao"]),
+    "nota_por_regiao_atraso": ("09_nota_por_regiao_atraso.sql", ["regiao", "atrasado"]),
+    "atraso_vendedor_destino": ("10_atraso_vendedor_destino.sql", ["vendedor_id", "estado"]),
+    "recompra_primeira_compra": ("11_recompra_primeira_compra.sql", ["primeira_atrasada"]),
+}
+
+
 def ler(nome):
     return pd.read_parquet(DADOS / f"{nome}.parquet")
 
@@ -64,7 +74,8 @@ precisa_banco = pytest.mark.skipif(not banco_disponivel(), reason="container oli
 # ------------------------------------------------------------ sem banco
 
 def test_parquets_do_painel_existem():
-    for nome in ["kpis_mensais", "categorias_abc", "entrega_por_estado", "nota_por_faixa", "resumo"]:
+    for nome in ["kpis_mensais", "categorias_abc", "entrega_por_estado", "nota_por_faixa", "resumo",
+                 *TABELAS_DO_RELATORIO]:
         assert (DADOS / f"{nome}.parquet").exists(), f"falta app/data/{nome}.parquet"
 
 
@@ -83,6 +94,24 @@ def test_curva_abc_em_ordem():
     # A classe nunca volta atrás. Uma categoria C antes de uma A quer dizer acumulado errado.
     assert list(abc.classe_abc) == sorted(abc.classe_abc)
     assert abc.acumulado.iloc[-1] == pytest.approx(1.0)
+
+
+def test_dia_atraso_fecha_com_as_faixas():
+    # As faixas são os mesmos dias agrupados. Pedidos e notas baixas somados precisam dar o mesmo total.
+    dia, faixa = ler("nota_por_dia_atraso"), ler("nota_por_faixa")
+    assert dia.pedidos.sum() == faixa.pedidos.sum()
+    assert dia.notas_baixas.sum() == (faixa.pedidos * faixa.pct_nota_baixa).round().sum()
+
+
+def test_regiao_fecha_com_os_estados():
+    por_estado = ler("entrega_por_estado").groupby("regiao").pedidos.sum()
+    por_regiao = ler("entrega_por_regiao").set_index("regiao").pedidos
+    assert por_regiao.sort_index().to_dict() == por_estado.sort_index().to_dict()
+
+
+def test_percentis_em_ordem():
+    r = ler("entrega_por_regiao")
+    assert ((r.p10 <= r.p25) & (r.p25 <= r.p50) & (r.p50 <= r.p75) & (r.p75 <= r.p90)).all()
 
 
 # ------------------------------------------------------------ com banco
@@ -158,3 +187,45 @@ def test_analise_11_pessoas_dentro_do_total():
     pg = analise_pg("11_recompra_primeira_compra.sql")
     assert pg.pessoas.sum() <= ler("resumo").clientes_total.iloc[0]
     assert (pg.voltaram < pg.pessoas).all()
+
+
+def conferir_com_o_postgres(nome):
+    """Compara a tabela da ouro com a análise SQL linha a linha, depois de ordenar os dois lados pelo grão.
+
+    Contagens precisam ser iguais. Percentis e somas aceitam só diferença de arredondamento de ponto flutuante.
+    """
+    arquivo, grao = TABELAS_DO_RELATORIO[nome]
+    ouro = ler(nome).sort_values(grao).reset_index(drop=True)
+    pg = analise_pg(arquivo).sort_values(grao).reset_index(drop=True)
+    assert list(ouro.columns) == list(pg.columns), "colunas diferentes entre Spark e SQL"
+    assert len(ouro) == len(pg), f"{nome}: {len(ouro)} linhas na ouro contra {len(pg)} no Postgres"
+    for coluna in ouro.columns:
+        if pd.api.types.is_float_dtype(ouro[coluna]) or pd.api.types.is_float_dtype(pg[coluna]):
+            assert ouro[coluna].tolist() == pytest.approx(pg[coluna].astype(float).tolist(), abs=1e-9), coluna
+        else:
+            assert ouro[coluna].tolist() == pg[coluna].tolist(), coluna
+
+
+@precisa_banco
+def test_nota_por_dia_atraso_bate_com_o_postgres():
+    conferir_com_o_postgres("nota_por_dia_atraso")
+
+
+@precisa_banco
+def test_entrega_por_regiao_bate_com_o_postgres():
+    conferir_com_o_postgres("entrega_por_regiao")
+
+
+@precisa_banco
+def test_nota_por_regiao_atraso_bate_com_o_postgres():
+    conferir_com_o_postgres("nota_por_regiao_atraso")
+
+
+@precisa_banco
+def test_atraso_vendedor_destino_bate_com_o_postgres():
+    conferir_com_o_postgres("atraso_vendedor_destino")
+
+
+@precisa_banco
+def test_recompra_primeira_compra_bate_com_o_postgres():
+    conferir_com_o_postgres("recompra_primeira_compra")
