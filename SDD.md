@@ -356,7 +356,7 @@ O projeto foi dividido em duas fases. Cada fase termina com uma entrega que func
 | 1 | Git, WSL2, Docker, repositório público, extração dos CSVs | feito |
 | 2 | Staging, carga, modelo estrela e "Integridade ok" | feito |
 | 3 | Visões, 6 análises SQL e teste de hipótese | feito |
-| 4 | README da fase 1 e post no LinkedIn | em andamento |
+| 4 | README da fase 1 | feito. O post foi trocado por um vídeo único no fim da fase 2 |
 
 ### Fase 2. Nuvem, painel e engenharia
 
@@ -395,6 +395,20 @@ Toda decisão relevante entra aqui, com data e motivo. É a memória do projeto 
 | 03/11/2026 | Projeto dividido em duas fases, cada uma com um post no LinkedIn | Mostrar resultado mais cedo. A fase 1 já prova SQL, modelagem e estatística, que são os itens mais pedidos nas vagas |
 | 03/11/2026 | Colunas do `dw` com nomes em português (`vendedor_id`, `produto_id`, `cliente_id`) | A staging espelha o CSV em inglês, e o `dw` é a camada do negócio. A troca de nome deixa claro em que camada cada consulta está |
 | 03/11/2026 | Teste 5 da integridade reescrito para "atraso só existe com data de entrega" | A versão anterior exigia ao mesmo tempo atraso calculado e entrega nula, o que nunca acontece. Era um teste que não podia falhar, e teste que não falha não protege nada |
+| 03/11/2026 | Um vídeo único no LinkedIn com o projeto inteiro, no lugar de um post por fase | O destaque do portfólio é a stack completa, da extração ao painel. Mostrar só a metade enfraquece a história |
+| 09/11/2026 | CI com dois jobs, pytest e pipeline SQL completo | O segundo job sobe o Postgres do zero e só fica verde com o "Integridade ok". Uma migration que quebre uma regra antiga é pega no PR, não na máquina de alguém |
+| 09/11/2026 | Dinheiro em `DECIMAL(10,2)` também no Spark | `DOUBLE` não fecha a soma ao centavo, e a ouro precisa bater com o Postgres exatamente |
+| 09/11/2026 | Parquet do painel gravado pelo pandas, um arquivo por tabela | O Spark grava uma pasta com vários pedaços. As tabelas do painel têm dezenas de linhas, então o pandas resolve sem custo |
+| 09/11/2026 | Conferência ouro x Postgres como teste do pytest, rodando no CI | A regra "toda camada nova é conferida contra a anterior" vira algo que roda sozinho, e não uma checagem manual que alguém esquece |
+| 09/11/2026 | Gráficos do painel em Altair | Já vem com o Streamlit, então não entra dependência nova, e permite tooltip e destaque de uma barra |
+| 09/11/2026 | `streamlit>=1.50` no `requirements.txt` | A máquina tinha dois Pythons, e o do pytest estava com Streamlit 1.48, sem o parâmetro `width`. Versão mínima fixada evita o mesmo erro no deploy |
+| 09/11/2026 | Limpar `attrs` do pandas antes de gravar o Parquet da ouro | No Serverless, o `toPandas()` guarda métricas da execução (`PlanMetrics`) em `df.attrs`. O pandas tenta gravar esse campo no Parquet como JSON e a exportação quebrava com "Object of type PlanMetrics is not JSON serializable" |
+| 09/11/2026 | Visão geral abre com a descoberta, não com a receita | O painel vai para um vídeo curto. Quem vê 5 segundos precisa ler o achado (6,7% dos pedidos atrasam e respondem por 32,6% das notas 1 e 2), e não um gráfico de vendas |
+| 09/11/2026 | Locale pt-BR no tema do Altair | Sem ele, o Vega escreve 0.2M e "Jan". Com o `locale` no tema, todo eixo e tooltip sai em 0,2 mi e jan/17 sem formatar gráfico por gráfico |
+| 09/11/2026 | Mapa do atraso com a malha do IBGE no repositório | O painel lê só arquivos locais para nunca cair, então a malha (98 KB) fica em `app/data`. Os anéis dos polígonos foram invertidos para o sentido que o d3-geo espera, senão o mapa pinta o mundo inteiro |
+| 09/11/2026 | Mapa em duas camadas, Brasil em cinza por baixo | O Vega apaga o polígono que não tem valor no campo da cor. Com o filtro de pedidos mínimos, os estados pequenos sumiam e o mapa ficava com buracos |
+| 09/11/2026 | Conclusões do painel calculadas a partir dos dados | A primeira versão dizia que o atraso se concentra no Norte. O Norte atrasa 8,6% e o Nordeste 12,8%, contra 6,7% na média. Texto gerado dos números não diverge deles |
+| 09/11/2026 | PRs sempre com base na `main`, sem empilhar | Com PRs empilhados, o merge com `--delete-branch` apagou a branch de base e o GitHub fechou os PRs seguintes em vez de trocar a base. Foram reabertos como #34, #35 e #36 |
 | 10/11/2026 | Relatório formal em `resultados/relatorio.md` e página Relatório no painel | O painel mostra a conclusão, o relatório mostra a metodologia, a conferência e as limitações. É o que separa análise de gráfico bonito |
 | 10/11/2026 | A base de cada número fica escrita no painel e no relatório | O atraso aparece como 6,7% (entregues e avaliados) e 6,8% (todos os entregues). Os dois estão certos, mas sem a base escrita parecem erro |
 | 10/11/2026 | A correlação mensal sai com a ressalva dos meses de crise | Com os 20 meses ela é -0,87. Sem nov/17, fev/18 e mar/18 cai para -0,44 e deixa de ser significativa. Esconder isso venderia uma prova mais forte do que ela é |
