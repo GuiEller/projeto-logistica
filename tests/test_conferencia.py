@@ -26,6 +26,8 @@ TABELAS_DO_RELATORIO = {
     "nota_por_regiao_atraso": ("09_nota_por_regiao_atraso.sql", ["regiao", "atrasado"]),
     "atraso_vendedor_destino": ("10_atraso_vendedor_destino.sql", ["vendedor_id", "estado"]),
     "recompra_primeira_compra": ("11_recompra_primeira_compra.sql", ["primeira_atrasada"]),
+    "faixa_por_estado": ("12_faixa_por_estado.sql", ["estado", "faixa_atraso"]),
+    "recompra_por_estado": ("13_recompra_por_estado.sql", ["estado"]),
 }
 
 
@@ -235,6 +237,16 @@ def test_recompra_primeira_compra_bate_com_o_postgres():
 
 # ------------------------------------------------------------ filtro por estado do painel
 # Somadas por estado, as tabelas novas precisam dar os números do Brasil que já foram conferidos.
+
+@precisa_banco
+def test_faixa_por_estado_bate_com_o_postgres():
+    conferir_com_o_postgres("faixa_por_estado")
+
+
+@precisa_banco
+def test_recompra_por_estado_bate_com_o_postgres():
+    conferir_com_o_postgres("recompra_por_estado")
+
 
 @precisa_banco
 def test_analise_12_soma_as_faixas_do_brasil():
