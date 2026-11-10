@@ -33,9 +33,16 @@ filtro["destaque"] = filtro.estado == "RJ"
 
 mapa, ranking = st.columns([4, 3])
 with mapa:
-    with painel("Atraso por estado", "mapa-logistica",
-                "Parcela dos pedidos entregue depois da data prometida. Cinza é estado fora do filtro."):
-        desenhar_clicavel(mapa_atraso(filtro, altura=460, uf=uf), "mapa-logistica")
+    # O volume explica o atraso: o mesmo percentual pesa muito mais onde há mais pedidos.
+    modo = st.segmented_control("Pintar o mapa por", ["Atraso", "Volume de pedidos"], default="Atraso",
+                                label_visibility="collapsed", key="modo_mapa") or "Atraso"
+    volume = modo != "Atraso"
+    with painel("Pedidos por estado" if volume else "Atraso por estado", "mapa-logistica",
+                ("Pedidos entregues de cada estado. A escala é de raiz quadrada, para o SP não apagar os outros. "
+                 if volume else "Parcela dos pedidos entregue depois da data prometida. ")
+                + "Cinza é estado fora do filtro."):
+        desenhar_clicavel(mapa_atraso(filtro, altura=460, uf=uf, **(
+            dict(campo="pedidos", titulo="Pedidos entregues") if volume else {})), "mapa-logistica")
 with ranking:
     parte_rj = (f"Laranja marca o RJ, com {pct(rj.pedidos / estados.pedidos.sum())} dos pedidos "
                 f"e {pct(rj.atrasos / estados.atrasos.sum())} dos atrasos.")
