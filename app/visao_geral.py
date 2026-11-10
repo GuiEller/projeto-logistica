@@ -3,12 +3,13 @@
 import altair as alt
 import streamlit as st
 
-from dados import (AZUL, DESTAQUE, alternar, barra_de_filtro, conclusao, desenhar_clicavel, faixas_do_estado, ler, mapa_atraso,
-                   num, painel, pct, razao, rodape)
+from dados import (AZUL, DESTAQUE, LINKEDIN, alternar, barra_de_filtro, conclusao, desenhar_clicavel, faixas_do_estado, ler,
+                   mapa_atraso, num, painel, pct, ranking_estados, razao, rodape)
 
 st.title("O atraso na entrega é o que mais derruba a nota")
 st.markdown("Cerca de 100 mil pedidos reais da Olist, de janeiro de 2017 a agosto de 2018, "
-            "tratados em PostgreSQL e no Databricks.")
+            "tratados em PostgreSQL e no Databricks. Análise de **Guilherme Eller**, "
+            f"[LinkedIn]({LINKEDIN}).")
 
 # Cartões, faixas e mapa saem da mesma tabela por estado. Com ou sem filtro, cada número aparece com um valor só.
 por_estado = ler("faixa_por_estado")
@@ -25,14 +26,14 @@ pct_recompra = razao(recompra.voltaram.sum(), recompra.clientes.sum())
 
 onde = f" em {uf}" if uf else ""
 # O estado escolhido fica na barra de filtro. No rótulo do cartão ele cortaria o texto.
-c1, c2, c3, c4 = st.columns(4)
-# height="stretch" deixa os quatro cartões da mesma altura, mesmo quando só um tem a linha de variação.
-kpi = dict(border=True, height="stretch")
-c1.metric("Pedidos que chegaram atrasados", pct(pct_atrasados), **kpi)
-c2.metric("Notas 1 e 2 que vêm de atraso", pct(parcela_notas_baixas), **kpi)
-c3.metric("Nota média com atraso", num(nota_atraso, 2),
-          f"-{num(nota_prazo - nota_atraso, 2)} contra {num(nota_prazo, 2)} no prazo", **kpi)
-c4.metric("Clientes que voltaram a comprar", pct(pct_recompra), **kpi)
+# A nota com atraso abre a faixa e é o maior número, porque responde ao título da página. A coluna dela é mais larga.
+with st.container(key="kpis-lider"):
+    c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
+    c1.metric("Nota média com atraso", num(nota_atraso, 2),
+              f"-{num(nota_prazo - nota_atraso, 2)} contra {num(nota_prazo, 2)} no prazo")
+    c2.metric("Pedidos que chegaram atrasados", pct(pct_atrasados))
+    c3.metric("Notas 1 e 2 que vêm de atraso", pct(parcela_notas_baixas))
+    c4.metric("Clientes que voltaram a comprar", pct(pct_recompra))
 
 # Faixa escolhida com clique nas barras. Ela pinta o mapa pela parte dos pedidos de cada estado naquela faixa.
 faixa = st.session_state.get("filtro_faixa")
@@ -68,7 +69,7 @@ with esq:
             marcadas = st.session_state[chave].selection.get("faixa", [])
             st.session_state["filtro_faixa"] = alternar(faixa, marcadas[0]["faixa_atraso"] if marcadas else None)
 
-        st.altair_chart((barras + valores).properties(height=300), width="stretch", theme=None, key=chave,
+        st.altair_chart((barras + valores).properties(height=332), width="stretch", theme=None, key=chave,
                         on_select=ao_clicar_na_faixa, selection_mode="faixa")
         if faixa:
             st.button("Ver todas as faixas", on_click=lambda: st.session_state.update(filtro_faixa=None))
@@ -89,7 +90,12 @@ with dir:
                              "Clique num estado para filtrar a página.")
     mapa = total.rename("pedidos").to_frame().assign(taxa=(parte / total).fillna(0)).reset_index()
     with painel("Onde o atraso acontece", "mapa", descricao):
-        desenhar_clicavel(mapa_atraso(mapa, altura=380, uf=uf, campo="taxa", titulo=titulo), "mapa-visao")
+        # Mapa com a lista dos maiores ao lado. A lista carrega os números que a cor do mapa só sugere.
+        no_mapa, na_lista = st.columns([3, 2])
+        with no_mapa:
+            desenhar_clicavel(mapa_atraso(mapa, altura=400, uf=uf, campo="taxa", titulo=titulo), "mapa-visao")
+        with na_lista:
+            ranking_estados(mapa, "taxa", "Estados com a maior parcela")
 
 if uf:
     brasil = faixas_do_estado(None)

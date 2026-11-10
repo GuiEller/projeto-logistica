@@ -7,17 +7,9 @@ import streamlit as st
 st.set_page_config(page_title="Olist Logística", page_icon=":material/local_shipping:", layout="wide")
 st.logo(str(Path(__file__).parent / "marca.svg"), size="large")
 
-# CSS mínimo. Limita a largura para a leitura não se espalhar em tela grande, pinta os blocos de branco
-# sobre o fundo cinza-azulado e alinha os números em colunas (tabular-nums).
-st.html("""
-<style>
-.block-container { max-width: 1200px; padding-top: 2.5rem; }
-[class*="st-key-painel"], [data-testid="stMetric"] { background: #ffffff; }
-[data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; font-weight: 700; }
-[data-testid="stMetricLabel"] p { color: #5f6672; font-size: 0.875rem; }
-h1 { letter-spacing: -0.02em; }
-</style>
-""")
+# Todo o visual (moldura, folha, tipografia, faixa de indicadores) mora em estilo.css, num arquivo só.
+# As páginas não repetem estilo. O Streamlit reinjeta o CSS a cada execução, então ele vale em todas elas.
+st.html(f"<style>{(Path(__file__).parent / 'estilo.css').read_text(encoding='utf-8')}</style>")
 
 # Menu no topo, com ícones. Com poucas páginas, a barra lateral só ocupava espaço da tela.
 st.navigation([

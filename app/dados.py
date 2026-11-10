@@ -329,17 +329,30 @@ def barra_de_filtro(pedidos_por_estado: pd.Series, base: str) -> str | None:
         valor = st.session_state["seletor_uf"]
         st.session_state["filtro_uf"] = None if valor == BRASIL else valor
 
-    caixa, botao, frase = st.columns([2, 2, 8], vertical_alignment="bottom")
+    caixa, resto = st.columns([2, 8], vertical_alignment="bottom")
     caixa.selectbox("Estado", [BRASIL] + sorted(pedidos_por_estado.index), key="seletor_uf", on_change=trocar)
     uf = estado_escolhido()
+    # A frase fica logo ao lado da caixa. Com um estado escolhido, o botão de voltar entra entre as duas.
     if uf:
+        botao, frase = resto.columns([2, 8], vertical_alignment="center")
         botao.button("Ver Brasil inteiro", on_click=escolher_estado, args=(None,), width="stretch")
         n = int(pedidos_por_estado.get(uf, 0))
         aviso = " Amostra pequena, leia com cuidado." if n < 300 else ""
         frase.caption(f"Filtrando {uf}, com {num(n)} {base}.{aviso} Clique de novo no estado para voltar ao Brasil inteiro.")
     else:
-        frase.caption("Clique num estado do mapa ou escolha na lista para filtrar a página.")
+        resto.caption("Clique num estado do mapa ou escolha na lista para filtrar a página.")
     return uf
+
+
+def ranking_estados(estados: pd.DataFrame, campo: str, titulo: str, minimo: int = 300, n: int = 6):
+    """Lista dos estados com maior `campo`, ao lado do mapa. Só entram estados com `minimo` pedidos ou mais."""
+    # Estado com 46 pedidos chegaria ao topo por acaso (1 atraso em 46 já são 2%). Mesmo corte do aviso de amostra pequena.
+    topo = estados[estados.pedidos >= minimo].nlargest(n, campo)
+    maior = topo[campo].max()
+    linhas = "".join(f'<li><span class="uf">{r.estado}</span><span class="barra"><i style="width:{100 * r[campo] / maior:.0f}%">'
+                     f'</i></span><span class="valor">{pct(r[campo])}</span></li>' for _, r in topo.iterrows())
+    st.html(f'<p class="rank-titulo">{titulo}</p><ol class="rank">{linhas}</ol>'
+            f'<p class="rank-nota">Estados com {num(minimo)} pedidos ou mais.</p>')
 
 
 def conclusao(texto: str):
@@ -348,6 +361,12 @@ def conclusao(texto: str):
         st.markdown(f"**Conclusão.** {texto}")
 
 
+LINKEDIN = "https://www.linkedin.com/in/guilherme-eller/"
+
+
 def rodape():
+    # O fecho da página leva a fonte dos dados e a assinatura de quem fez, com o caminho até o LinkedIn.
     st.caption("Base pública da Olist, pedidos de 01/2017 a 08/2018. Camada ouro processada no Databricks. "
                "Malha dos estados do IBGE.")
+    st.html(f'<p class="assinatura">Análise e painel por <strong>Guilherme Eller</strong>. '
+            f'<a href="{LINKEDIN}" target="_blank" rel="noopener">Conversar no LinkedIn</a></p>')

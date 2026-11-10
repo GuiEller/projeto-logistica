@@ -2,14 +2,16 @@
 base = "light"
 # Cor só nos dados. A moldura do app fica em tinta e cinza, para o olho ir direto ao gráfico.
 primaryColor = "#1d5fbf"
-backgroundColor = "#f2f4f7"
-secondaryBackgroundColor = "#ffffff"
-textColor = "#0a0a0a"
-borderColor = "#e3e6eb"
+backgroundColor = "#e8ecf2"
+secondaryBackgroundColor = "#f5f7fa"
+textColor = "#0b0f14"
+borderColor = "#dde2ea"
 showWidgetBorder = true
-baseRadius = "8px"
-font = "Geist:https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700&display=swap"
-headingFontWeights = [700, 700, 600, 600, 600, 600]
+baseRadius = "10px"
+# Instrument Sans no texto e Bricolage Grotesque nos títulos. As duas têm algarismos tabulares.
+font = "Instrument Sans:https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap"
+headingFont = "Bricolage Grotesque:https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap"
+headingFontWeights = [700, 700, 700, 700, 700, 700]
 
 [client]
 # Esconde o botão Deploy e o menu de desenvolvedor. O painel é para leitura.
