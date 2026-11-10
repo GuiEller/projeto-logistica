@@ -259,6 +259,95 @@ resumo = salvar(
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Tabelas do relatório
+# MAGIC
+# MAGIC Sustentam os achados do relatório. Cada uma tem um par em SQL (`sql/analises/07` a `11`) e a conferência exige que os dois lados batam.
+# MAGIC Guardam contagens e somas, nunca taxa pronta, para o painel poder juntar linhas sem fazer média de médias.
+
+# COMMAND ----------
+
+nota_baixa = F.col("nota_baixa").cast("int")
+contagens_de_nota = [F.count("*").alias("pedidos"), F.sum(nota_baixa).alias("notas_baixas"),
+                     F.sum("nota_avaliacao").alias("soma_notas")]
+
+# 07. A partir de que dia de atraso a nota despenca.
+nota_por_dia_atraso = salvar(
+    avaliados.groupBy("dias_atraso").agg(*contagens_de_nota).orderBy("dias_atraso"),
+    "nota_por_dia_atraso",
+)
+
+# 08. Faixa de entrega por região. percentile é exato e interpola entre vizinhos, como o percentile_cont
+# do Postgres. percentile_approx daria valores parecidos, mas não iguais, e a conferência pararia.
+QUANTIS = {"p10": 0.1, "p25": 0.25, "p50": 0.5, "p75": 0.75, "p90": 0.9}
+entrega_por_regiao = salvar(
+    pedidos_entregues.groupBy("regiao").agg(
+        F.count("*").alias("pedidos"),
+        F.expr(f"percentile(dias_atraso, array({', '.join(map(str, QUANTIS.values()))}))").alias("q"),
+    ).select("regiao", "pedidos", *[F.col("q")[i].alias(nome) for i, nome in enumerate(QUANTIS)])
+    .orderBy("regiao"),
+    "entrega_por_regiao",
+)
+
+# 09. Nota por região separando no prazo e atrasado. Separa o efeito do lugar do efeito do atraso.
+nota_por_regiao_atraso = salvar(
+    avaliados.groupBy("regiao", (~F.col("entregue_no_prazo")).alias("atrasado"))
+    .agg(*contagens_de_nota).orderBy("regiao", "atrasado"),
+    "nota_por_regiao_atraso",
+)
+
+# 10. Atraso do mesmo vendedor para cada destino. Pedido com mais de um vendedor fica fora, porque
+# não tem um responsável só. Conta vendedores distintos, não itens.
+vendedor_unico = (
+    fato_itens.groupBy("pedido_id")
+    .agg(F.countDistinct("vendedor_id").alias("vendedores"), F.min("vendedor_id").alias("vendedor_id"))
+    .filter("vendedores = 1").drop("vendedores")
+)
+atraso_vendedor_destino = salvar(
+    pedidos_entregues.filter(F.col("estado").isin("RJ", "SP", "MG", "ES"))
+    .join(vendedor_unico, "pedido_id")
+    .join(dim_vendedor.select("vendedor_id", F.col("estado").alias("estado_vendedor")), "vendedor_id")
+    .groupBy("vendedor_id", "estado_vendedor", "estado")
+    .agg(F.count("*").alias("pedidos"), F.sum(atrasado).alias("atrasos"))
+    .orderBy("vendedor_id", "estado"),
+    "atraso_vendedor_destino",
+)
+
+# 11. Recompra pela primeira compra. A fato guarda só o dia, então o horário vem da prata.
+# Duas compras no mesmo instante são desempatadas por pedido_id, igual ao SQL, para a escolha não variar.
+vendas = fato_pedidos.filter(VENDA_VALIDA).join(
+    prata("pedidos").select("pedido_id", F.col("data_compra").alias("horario")), "pedido_id")
+ordem_de_compra = Window.partitionBy("cliente_id").orderBy("horario", "pedido_id")
+primeiras = vendas.withColumn("ordem", F.row_number().over(ordem_de_compra)).filter("ordem = 1")
+compras = vendas.groupBy("cliente_id").agg(F.count("*").alias("vendas"))
+recompra_primeira_compra = salvar(
+    primeiras.select("cliente_id", "pedido_id")
+    # Só primeira compra entregue e dentro da janela, que é onde existe atraso para medir.
+    .join(pedidos_entregues.select("pedido_id", (~F.col("entregue_no_prazo")).alias("primeira_atrasada")), "pedido_id")
+    .join(compras, "cliente_id")
+    .groupBy("primeira_atrasada")
+    .agg(F.count("*").alias("pessoas"), F.sum((F.col("vendas") > 1).cast("int")).alias("voltaram"))
+    .orderBy("primeira_atrasada"),
+    "recompra_primeira_compra",
+)
+
+# COMMAND ----------
+
+# Controles das tabelas do relatório, os mesmos que o pytest faz no SQL. Base errada para aqui, antes do painel.
+soma = lambda df: df.agg(F.sum("pedidos")).first()[0]
+n_avaliados = avaliados.count()
+assert soma(nota_por_dia_atraso) == n_avaliados == 95560, "nota_por_dia_atraso não fecha com os pedidos avaliados"
+assert soma(nota_por_regiao_atraso) == n_avaliados, "nota_por_regiao_atraso não fecha com os pedidos avaliados"
+assert soma(entrega_por_regiao) == soma(entrega_por_estado), "entrega_por_regiao não fecha com entrega_por_estado"
+por_estado = {r.estado: r.pedidos for r in entrega_por_estado.collect()}
+for r in atraso_vendedor_destino.groupBy("estado").agg(F.sum("pedidos").alias("n")).collect():
+    # Vendedor único tira poucos pedidos. Mais de 3% de perda indica regra errada.
+    assert 0.97 * por_estado[r.estado] <= r.n <= por_estado[r.estado], f"vendedor único tirou pedidos demais de {r.estado}"
+assert recompra_primeira_compra.agg(F.sum("pessoas")).first()[0] <= dim_cliente.count(), "mais pessoas do que clientes"
+print("Tabelas do relatório ok")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Databricks SQL
 # MAGIC
 # MAGIC As tabelas da ouro estão no catálogo e podem ser consultadas em SQL puro, aqui ou no SQL Editor.
@@ -284,7 +373,9 @@ resumo = salvar(
 
 from pyspark.sql.types import DecimalType
 
-PAINEL = ["kpis_mensais", "categorias_abc", "entrega_por_estado", "nota_por_faixa", "resumo"]
+PAINEL = ["kpis_mensais", "categorias_abc", "entrega_por_estado", "nota_por_faixa", "resumo",
+          "nota_por_dia_atraso", "entrega_por_regiao", "nota_por_regiao_atraso", "atraso_vendedor_destino",
+          "recompra_primeira_compra"]
 for nome in PAINEL:
     df = spark.table(f"workspace.ouro.{nome}")
     df = df.select([F.col(c.name).cast("double") if isinstance(c.dataType, DecimalType) else F.col(c.name) for c in df.schema])

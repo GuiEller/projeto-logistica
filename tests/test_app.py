@@ -6,6 +6,7 @@ antes de ir para o ar.
 
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -56,3 +57,22 @@ def test_relatorio_mantem_os_numeros_do_ab(monkeypatch):
     cartoes = {m.label: m.value for m in at.metric}
     assert cartoes["Meses de coleta"] == "5,8"
     assert cartoes["Pedidos atrasados por grupo"] == "1.507"
+
+
+def test_comparar_destinos_filtra_e_pareia(monkeypatch):
+    monkeypatch.syspath_prepend(str(APP))
+    from dados import comparar_destinos
+    t = pd.DataFrame({
+        "vendedor_id": ["a", "a", "b", "b", "c", "c"],
+        "estado_vendedor": ["SP", "SP", "SP", "SP", "RJ", "RJ"],
+        "estado": ["RJ", "SP"] * 3,
+        "pedidos": [20, 20, 30, 30, 5, 40],
+        "atrasos": [4, 1, 6, 0, 1, 2],
+    })
+    r = comparar_destinos(t, "RJ", "SP")
+    assert r["vendedores"] == 2                      # c tem só 5 pedidos para o RJ
+    assert r["media_a"] == pytest.approx((0.2 + 0.2) / 2)
+    assert r["taxa_b"] == pytest.approx(1 / 50)
+    assert list(r["pares"].columns) == ["vendedor_id", "taxa_a", "taxa_b"]
+    assert comparar_destinos(t, "RJ", "SP", fora_dos_destinos=True)["vendedores"] == 0
+    assert comparar_destinos(t, "RJ", "SP", origem="RJ")["vendedores"] == 0

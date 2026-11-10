@@ -182,7 +182,7 @@ Toda regra abaixo está no código e você precisa saber o porquê de cada uma.
 
 ### 7.6 Análises em SQL
 
-Seis consultas em `sql/analises/`, cada uma responde uma pergunta.
+Onze consultas em `sql/analises/`, cada uma responde uma pergunta. As cinco últimas sustentam os achados do relatório e têm uma tabela gêmea na camada ouro.
 
 | Arquivo | Pergunta | Técnica principal |
 |---|---|---|
@@ -192,6 +192,13 @@ Seis consultas em `sql/analises/`, cada uma responde uma pergunta.
 | `04_rfm_segmentos.sql` | Como segmentar para CRM? | `NTILE` |
 | `05_atraso_vs_avaliacao.sql` | O atraso derruba a nota? | agregação condicional |
 | `06_atraso_por_estado.sql` | Onde agir primeiro? | `RANK`, `HAVING` |
+| `07_nota_por_dia_atraso.sql` | A partir de que dia de atraso a nota despenca? | `FILTER`, contagem por valor exato |
+| `08_entrega_por_regiao.sql` | A entrega é menos previsível em alguma região? | `percentile_cont` |
+| `09_nota_por_regiao_atraso.sql` | A nota baixa vem da região ou do atraso? | estratificação |
+| `10_atraso_vendedor_destino.sql` | O RJ atrasa pelo vendedor ou pela rota? | CTE com `HAVING COUNT(DISTINCT)`, comparação pareada |
+| `11_recompra_primeira_compra.sql` | Quem teve a primeira compra atrasada volta menos? | `DISTINCT ON` com desempate |
+
+Os números que o relatório cita sobre esses achados saem de `py -3.12 analise/achados_relatorio.py`, que lê os Parquet já conferidos e diz se cada achado passou no critério combinado antes da análise.
 
 **Você aprende.** Window functions, que são o assunto de SQL que mais aparece em teste técnico.
 
@@ -224,6 +231,8 @@ Seis consultas em `sql/analises/`, cada uma responde uma pergunta.
 **O que é.** As tabelas ouro agregadas saem como Parquet para `app/data`, e um teste confere pedidos, receita e clientes contra o PostgreSQL.
 
 **Por que existe.** Duas fontes que deveriam ser iguais e não foram conferidas são duas fontes de erro. A conferência prova que o pipeline da nuvem está certo.
+
+As cinco tabelas do relatório são conferidas linha a linha contra as análises `07` a `11`, depois de ordenar os dois lados pelo grão. Contagem tem que ser igual e percentil ou soma só pode diferir por arredondamento de ponto flutuante.
 
 **Você aprende.** Formato colunar, reconciliação de dados, teste automatizado comparando fontes.
 
@@ -381,3 +390,9 @@ Toda decisão relevante entra aqui, com data e motivo. É a memória do projeto 
 | 10/11/2026 | A base de cada número fica escrita no painel e no relatório | O atraso aparece como 6,7% (entregues e avaliados) e 6,8% (todos os entregues). Os dois estão certos, mas sem a base escrita parecem erro |
 | 10/11/2026 | A correlação mensal sai com a ressalva dos meses de crise | Com os 20 meses ela é -0,87. Sem nov/17, fev/18 e mar/18 cai para -0,44 e deixa de ser significativa. Esconder isso venderia uma prova mais forte do que ela é |
 | 10/11/2026 | Tamanho de amostra do A/B calculado com `statistics.NormalDist` | A biblioteca padrão já tem a normal inversa, então a página não precisa do SciPy para isso |
+| 10/11/2026 | Tabela por vendedor só com pedidos de vendedor único | Pedido com dois vendedores não tem um responsável só pelo atraso. São 1.272 de 96.203 entregues, menos de 3% em cada estado comparado. O controle conta vendedores distintos, porque contar itens tiraria pedidos de um vendedor só com vários itens |
+| 10/11/2026 | Vendedor só entra na comparação com 20 ou mais pedidos em cada destino | Com 3 pedidos, uma entrega atrasada vira 33% e domina a média. O corte deixa 124 vendedores na comparação RJ contra SP |
+| 10/11/2026 | Percentil exato (`percentile` no Spark, `percentile_cont` no Postgres) | `percentile_approx` é mais rápido em dado grande, mas dá valores próximos e não iguais, e a conferência linha a linha pararia. Com 96 mil pedidos o exato custa pouco |
+| 10/11/2026 | Primeira compra desempatada por `pedido_id` | Duas compras da mesma pessoa no mesmo segundo deixariam a escolha da primeira ao acaso, e Spark e Postgres poderiam escolher pedidos diferentes |
+| 10/11/2026 | Análise SQL enviada ao container com UTF-8 explícito e `ON_ERROR_STOP` | No Windows o Python enviava o arquivo em cp1252, os acentos dos comentários chegavam corrompidos e o psql descartava a consulta, devolvendo vazio sem erro. O teste mostrava `EmptyDataError` em vez da causa |
+| 10/11/2026 | Critérios dos achados novos combinados antes de ler os números finais | Escolher o critério depois de ver o resultado é ajustar a régua ao que se quer provar. Os dois critérios estão no topo de `analise/achados_relatorio.py` |
