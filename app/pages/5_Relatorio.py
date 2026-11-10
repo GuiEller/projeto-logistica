@@ -6,13 +6,16 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from dados import (AZUL, CINZA, DESTAQUE, TINTA, conclusao, desenhar, ler, mes_br, num, painel, pct,
-                   ponderada, resumo, rodape, tamanho_amostra)
+from dados import (AZUL, CINZA, DESTAQUE, TINTA, conclusao, desenhar, desenhar_clicavel, estado_escolhido, ler,
+                   mes_br, num, painel, pct, ponderada, resumo, rodape, tamanho_amostra)
 
 st.title("Quanto dá para confiar nos achados?")
 st.markdown("A visão geral mostrou que o atraso derruba a nota pedido a pedido. Esta página confere a mesma relação "
             "de outros dois ângulos, estima quanto cada recomendação rende e desenha o teste da recomendação 3. "
             "O texto completo está em `resultados/relatorio.md` no repositório.")
+uf = estado_escolhido()
+if uf:
+    st.caption(f"Correlações, cenários e teste A/B são do Brasil inteiro. {uf} aparece destacado na dispersão dos estados.")
 
 
 def correlacao(x: pd.Series, y: pd.Series, metodo="pearson"):
@@ -69,21 +72,38 @@ c4.metric("Meses de teste A/B", num(2 * tamanho_amostra(nota_baixa_atraso, nota_
           help="Para enxergar uma queda de 5 pontos na nota 1 ou 2 dos atrasados", **kpi)
 
 meses_crise = ", ".join(crise.mes)
+# Mês clicado em qualquer um dos dois gráficos mensais. Ele acende nos dois.
+mes = st.session_state.get("filtro_mes")
+mes = mes if mes in set(kpis.ano_mes) else None
+aceso = alt.condition(f"datum.ano_mes == '{mes}'" if mes else "true", alt.value(1), alt.value(0.3))
+
+
+def desenhar_mes(grafico, chave: str, parametro: str):
+    chave = f"{chave}-{mes}"
+
+    def ao_clicar():
+        marcados = st.session_state[chave].selection.get(parametro, [])
+        st.session_state["filtro_mes"] = marcados[0]["ano_mes"] if marcados else None
+
+    st.altair_chart(grafico.add_params(alt.selection_point(name=parametro, fields=["ano_mes"], on="click")),
+                    width="stretch", theme=None, key=chave, on_select=ao_clicar, selection_mode=parametro)
+
 with painel("Nos meses em que o atraso subiu, a nota caiu", "serie",
             f"Correlação de Pearson de {num(r_mes, 2)} (IC 95% de {num(r_mes_min, 2)} a {num(r_mes_max, 2)}), "
-            f"com 20 meses. Em tom escuro, os meses fora do padrão ({meses_crise})."):
+            f"com 20 meses. Em tom escuro, os meses fora do padrão ({meses_crise}). "
+            "Clique num mês para acendê-lo nos dois gráficos."):
     # Dois gráficos empilhados com o mesmo eixo de meses, no lugar de um gráfico de dois eixos.
     # Dois eixos no mesmo gráfico deixam a escala decidir se as linhas parecem andar juntas.
     eixo_x = alt.X("mes:O", sort=None, title=None, axis=alt.Axis(labelAngle=0, labelOverlap=True))
     # minExtent igual nos dois eixos Y para as colunas dos meses ficarem alinhadas entre os gráficos.
     dica = [alt.Tooltip("mes", title="Mês"), alt.Tooltip("pedidos", title="Pedidos", format=","),
             alt.Tooltip("taxa_atraso", title="Atraso", format=".1%"), alt.Tooltip("nota_media", title="Nota média", format=".2f")]
-    desenhar(alt.Chart(kpis).mark_bar(cornerRadiusEnd=3).encode(
+    desenhar_mes(alt.Chart(kpis).mark_bar(cornerRadiusEnd=3, cursor="pointer").encode(
         x=eixo_x,
         y=alt.Y("taxa_atraso:Q", title="Atraso", axis=alt.Axis(format=".0%", tickCount=4, minExtent=44)),
         color=alt.condition("datum.crise", alt.value("#7a2e0b"), alt.value(DESTAQUE)),
-        tooltip=dica,
-    ).properties(height=170))
+        opacity=aceso, tooltip=dica,
+    ).properties(height=170), "atraso-mes", "mes")
     # Linha não precisa começar no zero. A nota varia entre 3,7 e 4,3 e é essa variação que interessa.
     linha = alt.Chart(kpis).encode(
         x=eixo_x,
@@ -91,9 +111,16 @@ with painel("Nos meses em que o atraso subiu, a nota caiu", "serie",
                 axis=alt.Axis(format=".1f", tickCount=4, minExtent=44)),
         tooltip=dica,
     )
-    desenhar((linha.mark_line(color=AZUL, strokeWidth=2.5)
-              + linha.mark_point(filled=True, size=60).encode(
-                  color=alt.condition("datum.crise", alt.value(TINTA), alt.value(AZUL)))).properties(height=170))
+    pontos_nota = linha.mark_point(filled=True, cursor="pointer").encode(
+        color=alt.condition("datum.crise", alt.value(TINTA), alt.value(AZUL)), opacity=aceso,
+        size=alt.condition(f"datum.ano_mes == '{mes}'" if mes else "false", alt.value(180), alt.value(60)))
+    desenhar_mes(alt.layer(linha.mark_line(color=AZUL, strokeWidth=2.5), pontos_nota).properties(height=170),
+                 "nota-mes", "mes_nota")
+    if mes:
+        escolhido = kpis.set_index("ano_mes").loc[mes]
+        st.caption(f"{escolhido.mes}: {pct(escolhido.taxa_atraso)} dos pedidos atrasados e nota média "
+                   f"{num(escolhido.nota_media, 2)}, em {num(escolhido.pedidos)} pedidos.")
+        st.button("Ver todos os meses", on_click=lambda: st.session_state.update(filtro_mes=None))
     st.caption(f"Sem os meses fora do padrão, a correlação cai para {num(r_sem_crise, 2)} e deixa de ser significativa "
                "a 5%. A relação mensal existe, mas é puxada pelos picos de atraso. Por isso a prova principal continua "
                "sendo o teste pedido a pedido da página Cliente.")
@@ -107,8 +134,9 @@ with esq:
         # O resto aparece no tooltip. Com sigla nos 27, PR cai em cima de SP, AP em cima de AM e nenhuma fica legível.
         com_sigla = (set(estados.nlargest(4, "pedidos").estado) | set(estados.nlargest(3, "taxa_atraso").estado)
                      | set(estados.nsmallest(1, "taxa_atraso").estado))
+        # O estado escolhido sempre ganha sigla, mesmo fora da regra acima.
         rotulados = estados.assign(destaque=estados.estado == "RJ",
-                                   rotulo=estados.estado.where(estados.estado.isin(com_sigla), ""))
+                                   rotulo=estados.estado.where(estados.estado.isin(com_sigla | {uf}), ""))
         base = alt.Chart(rotulados).encode(
             x=alt.X("taxa_atraso:Q", title="Pedidos atrasados", axis=alt.Axis(format=".0%", tickCount=5)),
             # Domínio fixo com folga em cima, para a sigla de SP não sair do gráfico e o eixo andar de 0,1 em 0,1.
@@ -118,15 +146,21 @@ with esq:
                      alt.Tooltip("taxa_atraso", title="Atraso", format=".1%"),
                      alt.Tooltip("nota_media", title="Nota média", format=".2f")],
         )
-        pontos = base.mark_circle(opacity=0.75).encode(
+        escolhido = f"datum.estado == '{uf}'"
+        pontos = base.mark_circle(cursor="pointer").encode(
             size=alt.Size("pedidos:Q", legend=None, scale=alt.Scale(range=[30, 900])),
-            color=alt.condition("datum.destaque", alt.value(DESTAQUE), alt.value(AZUL)))
+            color=alt.condition("datum.destaque", alt.value(DESTAQUE), alt.value(AZUL)),
+            # Com estado escolhido, ele fica cheio e contornado. Os outros continuam, apagados, para a correlação seguir à vista.
+            opacity=alt.condition(escolhido if uf else "true", alt.value(0.85), alt.value(0.25)),
+            stroke=alt.condition(escolhido, alt.value(TINTA), alt.value(None)),
+            strokeWidth=alt.condition(escolhido, alt.value(2), alt.value(0)),
+        ).add_params(alt.selection_point(name="uf", fields=["estado"], on="click"))
         # Sigla acima do ponto. SP tem círculo grande e sobe mais. MG fica logo abaixo de SP, então desce.
         sigla = lambda filtro, dy: base.transform_filter(filtro).mark_text(dy=dy, fontSize=11, color=CINZA).encode(text="rotulo:N")
         siglas = (sigla("datum.estado != 'SP' && datum.estado != 'MG'", -11)
                   + sigla("datum.estado == 'SP'", -24) + sigla("datum.estado == 'MG'", 16))
-        desenhar((pontos + siglas).properties(height=340))
-        st.caption("Laranja marca o RJ. Sigla nos 4 estados com mais pedidos, nos 3 que mais atrasam e no que menos atrasa. "
+        desenhar_clicavel((pontos + siglas).properties(height=340), "dispersao", parametros=("uf",))
+        st.caption("Laranja marca o RJ. Clique num estado para filtrar o painel por ele. Sigla nos 4 estados com mais pedidos, nos 3 que mais atrasam e no que menos atrasa. "
                    "Correlação entre estados não fala de cada pedido, mas confirma no mapa o que "
                    "o teste de hipótese mostrou pedido a pedido.")
 with dir:
