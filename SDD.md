@@ -290,12 +290,17 @@ Estes números vêm do pipeline local e do teste de hipótese, e o painel precis
 - A nota média cai de 4,29 no prazo para 2,27 com atraso. Pedido atrasado tem 6,7 vezes mais chance de nota baixa.
 - O RJ tem 12,8% dos pedidos e 22,9% dos atrasos. O Nordeste tem a pior taxa de atraso, 12,8%, contra 4,5% em SP.
 - Em média, o pedido chega 11,8 dias antes do prazo prometido.
+- A nota baixa vai de 12,4% no dia prometido para 19,7% com 1 dia de atraso, 34,3% com 2 e 50,4% com 3.
+- O mesmo vendedor atrasa em média 12,2% dos pedidos para o RJ e 4,4% para SP (124 vendedores, Wilcoxon p = 5,5e-15). O resultado se mantém com vendedores só de SP comparando RJ e MG e com vendedores de fora dos dois estados. O atraso do RJ vem do caminho, não do vendedor.
+- Entre os 80% de pedidos do meio, a entrega no Nordeste varia 27 dias e no Sudeste 19. O Nordeste é a única região em que o p90 passa do dia prometido.
+- Dentro de cada situação a região quase não muda a nota. No prazo, de 4,20 a 4,30. Atrasado, de 2,14 a 2,37.
+- Quem teve a primeira compra atrasada volta um pouco menos, 2,5% contra 3,1% (p = 0,021). Achado secundário, com a ressalva de que quem comprou no fim da janela teve menos tempo para voltar.
 
 ## 9. Recomendações de negócio
 
-1. Atacar o atraso no RJ primeiro.
+1. Rever a entrega até o cliente no RJ (transportadora, rota, última milha), porque o vendedor foi descartado como causa.
 2. Prometer prazo por região, e não um prazo nacional.
-3. Avisar o cliente antes de atrasar, testando com experimento A/B.
+3. Avisar o cliente antes do primeiro dia de atraso, testando com experimento A/B.
 4. Criar um programa de segunda compra para os cerca de 14 mil clientes de alto valor que não voltaram.
 
 ## 10. Como saber que deu certo
@@ -397,3 +402,6 @@ Toda decisão relevante entra aqui, com data e motivo. É a memória do projeto 
 | 10/11/2026 | Análise SQL enviada ao container com UTF-8 explícito e `ON_ERROR_STOP` | No Windows o Python enviava o arquivo em cp1252, os acentos dos comentários chegavam corrompidos e o psql descartava a consulta, devolvendo vazio sem erro. O teste mostrava `EmptyDataError` em vez da causa |
 | 10/11/2026 | Critérios dos achados novos combinados antes de ler os números finais | Escolher o critério depois de ver o resultado é ajustar a régua ao que se quer provar. Os dois critérios estão no topo de `analise/achados_relatorio.py` |
 | 10/11/2026 | Análise 11 com window functions numa passada só, e limite de 60 segundos por consulta na conferência | A versão anterior juntava uma CTE com ela mesma. No banco recém-criado do CI, sem ANALYZE, o Postgres estimou 200 linhas de cada lado e escolheu um laço aninhado de bilhões de comparações, e o job ficou preso por mais de 20 minutos. No banco local o autovacuum já tinha coletado estatísticas e a consulta levava menos de 1 segundo |
+| 10/11/2026 | Painel de folga da Logística trocado pela faixa de entrega por região (p10 a p90) | A folga média do Nordeste é igual à do Sudeste e escondia a diferença. A faixa mostra que a entrega no Nordeste é menos previsível, que é o que explica o atraso maior |
+| 10/11/2026 | Recomendação 1 passou de "atacar o atraso no RJ" para "rever a entrega até o cliente no RJ" | A comparação pelo mesmo vendedor mostrou que o atraso do RJ não vem de quem vende. Cobrar o vendedor seria agir no lugar errado |
+| 10/11/2026 | Hipótese de atrasos mais longos nos meses de crise continua aberta | O único número que existe veio da exploração nos CSVs, sem tabela conferida na camada ouro. Número sem conferência não entra no relatório como conclusão |

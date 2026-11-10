@@ -23,7 +23,6 @@ if filtro.empty:
 
 pior = filtro.sort_values("taxa_atraso", ascending=False).iloc[0]
 rj = estados[estados.estado == "RJ"].iloc[0]
-sp = estados[estados.estado == "SP"].iloc[0]
 # O RJ é o destaque porque é onde a recomendação manda agir. AL atrasa mais, mas tem 30 vezes menos pedidos.
 filtro["destaque"] = filtro.estado == "RJ"
 
@@ -81,7 +80,7 @@ with painel("O mesmo vendedor atrasa mais para o RJ", "vendedores",
         tooltip=dica)
     desenhar((ligacao + marcas).properties(height=300))
     st.caption(f"Dois controles dão o mesmo resultado. Só vendedores de SP, o RJ atrasa {pct(rj_mg['media_a'])} contra "
-               f"{pct(rj_mg['media_b'])} em MG, que fica à mesma distância ({rj_mg['vendedores']} vendedores). "
+               f"{pct(rj_mg['media_b'])} em MG, que fica mais longe de SP do que o RJ ({rj_mg['vendedores']} vendedores). "
                f"Só vendedores de fora de RJ e SP, {pct(de_fora['media_a'])} contra {pct(de_fora['media_b'])} "
                f"({de_fora['vendedores']} vendedores). Teste de Wilcoxon pareado, p de no máximo "
                f"{num(max(rj_sp['p_valor'], rj_mg['p_valor'], de_fora['p_valor']), 4)} nos três. "
@@ -127,10 +126,13 @@ with c2:
         desenhar(barras_regiao("frete_medio", "Frete médio", "$,.0f", "Frete (R$)"))
 
 folga_geral = ponderada(estados, "prazo_medio") - ponderada(estados, "entrega_media")
+largura = ler("entrega_por_regiao").assign(l=lambda d: d.p90 - d.p10).set_index("regiao").l
 conclusao(
-    f"O RJ tem {pct(rj.pedidos / estados.pedidos.sum())} dos pedidos e {pct(rj.atrasos / estados.atrasos.sum())} dos atrasos. "
-    f"Nos filtros atuais, o pior estado é {pior.estado}, com {pct(pior.taxa_atraso)} de atraso contra {pct(sp.taxa_atraso)} em SP. "
-    f"Ao mesmo tempo, o pedido médio chega {num(folga_geral, 1)} dias antes do prometido. "
-    "O prazo nacional é folgado demais onde a entrega é rápida e apertado onde ela é lenta."
+    f"O RJ tem {pct(rj.pedidos / estados.pedidos.sum())} dos pedidos e {pct(rj.atrasos / estados.atrasos.sum())} dos atrasos, "
+    f"e o mesmo vendedor atrasa {pct(rj_sp['media_a'])} para o RJ contra {pct(rj_sp['media_b'])} para SP. O problema do RJ "
+    f"está na rota, não no vendedor. Nos filtros atuais, o pior estado é {pior.estado}, com {pct(pior.taxa_atraso)} de atraso. "
+    f"O pedido médio chega {num(folga_geral, 1)} dias antes do prometido, mas a entrega no Nordeste varia {num(largura['Nordeste'])} "
+    f"dias contra {num(largura['Sudeste'])} no Sudeste. O prazo nacional único é folgado onde a entrega é rápida e apertado "
+    "onde ela é imprevisível."
 )
 rodape()
