@@ -152,6 +152,26 @@ with dir:
                  .properties(height=200))
         st.caption("Estimativa que supõe que o pedido que deixa de atrasar passa a ser avaliado como um pedido no prazo. "
                    "O teste mostra associação, então o número real tende a ser menor.")
+    # Estratificação. O Nordeste tem nota menor, mas também atrasa mais. Comparar regiões dentro de cada situação
+    # separa o efeito do lugar do efeito do atraso.
+    regiao = ler("nota_por_regiao_atraso").assign(
+        nota=lambda d: d.soma_notas / d.pedidos,
+        situacao=lambda d: d.atrasado.map({False: "No prazo", True: "Atrasado"}))
+    faixa = regiao.groupby("situacao").nota.agg(["min", "max"])
+    with painel("A região não muda a conclusão", "regiao-situacao",
+                f"Nota média de cada região. No prazo, todas ficam entre {num(faixa.loc['No prazo', 'min'], 2)} e "
+                f"{num(faixa.loc['No prazo', 'max'], 2)}. Atrasado, entre {num(faixa.loc['Atrasado', 'min'], 2)} e "
+                f"{num(faixa.loc['Atrasado', 'max'], 2)}. O que derruba a nota é o atraso, não o lugar."):
+        desenhar(alt.Chart(regiao).mark_circle(size=140, opacity=0.9).encode(
+            y=alt.Y("regiao:N", title=None, sort=["Norte", "Nordeste", "Centro-Oeste", "Sudeste", "Sul"]),
+            # Eixo de 1 a 5, a escala inteira da nota, para a distância entre os grupos não ser exagerada.
+            x=alt.X("nota:Q", title="Nota média", scale=alt.Scale(domain=[1, 5]), axis=alt.Axis(tickCount=5, format=".0f")),
+            color=alt.Color("situacao:N", title=None, scale=alt.Scale(domain=["No prazo", "Atrasado"], range=[AZUL, DESTAQUE]),
+                            legend=alt.Legend(orient="top", direction="horizontal")),
+            tooltip=[alt.Tooltip("regiao", title="Região"), alt.Tooltip("situacao", title="Situação"),
+                     alt.Tooltip("pedidos", title="Pedidos avaliados", format=","),
+                     alt.Tooltip("nota", title="Nota média", format=".2f")],
+        ).properties(height=200))
 
 with painel("Quanto tempo leva o teste A/B do aviso de atraso", "ab",
             f"Hoje {pct(nota_baixa_atraso)} dos atrasados dão nota 1 ou 2. O teste divide os atrasados em dois grupos, "
