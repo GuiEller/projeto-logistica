@@ -76,3 +76,13 @@ def test_comparar_destinos_filtra_e_pareia(monkeypatch):
     assert list(r["pares"].columns) == ["vendedor_id", "taxa_a", "taxa_b"]
     assert comparar_destinos(t, "RJ", "SP", fora_dos_destinos=True)["vendedores"] == 0
     assert comparar_destinos(t, "RJ", "SP", origem="RJ")["vendedores"] == 0
+
+
+def test_logistica_cita_os_vendedores_da_comparacao(monkeypatch):
+    # O número do texto precisa sair da mesma função que o relatório usa, não de uma conta à parte.
+    monkeypatch.syspath_prepend(str(APP))
+    from dados import comparar_destinos, ler
+    n = comparar_destinos(ler("atraso_vendedor_destino"), "RJ", "SP")["vendedores"]
+    at = AppTest.from_file(str(APP / "pages/2_Logistica.py"), default_timeout=30).run()
+    assert not at.exception
+    assert any(f"{n} vendedores" in c.value for c in at.caption)

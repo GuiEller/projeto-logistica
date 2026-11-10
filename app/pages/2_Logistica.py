@@ -4,7 +4,8 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from dados import (AZUL, DESTAQUE, conclusao, desenhar, ler, mapa_atraso, num, painel, pct, ponderada, rodape)
+from dados import (AZUL, DESTAQUE, NEUTRO_CLARO, comparar_destinos, conclusao, desenhar, ler, mapa_atraso, num,
+                   painel, pct, ponderada, rodape)
 
 st.title("Onde a entrega falha?")
 
@@ -51,12 +52,46 @@ with ranking:
             text=alt.Text("taxa_atraso:Q", format=".1%"))
         desenhar((barras + valores).properties(height=max(260, 20 * len(filtro))))
 
+# O mesmo vendedor entregando para RJ e para SP. Não depende dos filtros da página, porque compara vendedores, não estados.
+vendedor = ler("atraso_vendedor_destino")
+rj_sp = comparar_destinos(vendedor, "RJ", "SP")
+rj_mg = comparar_destinos(vendedor, "RJ", "MG", origem="SP")
+de_fora = comparar_destinos(vendedor, "RJ", "SP", fora_dos_destinos=True)
+pares = rj_sp["pares"].assign(diferenca=lambda d: d.taxa_a - d.taxa_b).sort_values("diferenca")
+pares["ordem"] = range(1, len(pares) + 1)
+pontos = pares.melt(id_vars=["vendedor_id", "ordem"], value_vars=["taxa_b", "taxa_a"], var_name="destino", value_name="taxa")
+pontos["destino"] = pontos.destino.map({"taxa_a": "Para o RJ", "taxa_b": "Para SP"})
+
+with painel("O mesmo vendedor atrasa mais para o RJ", "vendedores",
+            f"{rj_sp['vendedores']} vendedores com 20 ou mais pedidos para cada destino. Em média, eles atrasam "
+            f"{pct(rj_sp['media_a'])} dos pedidos para o RJ e {pct(rj_sp['media_b'])} para SP. "
+            "Como o vendedor é o mesmo, a diferença vem do caminho até o cliente."):
+    # Cada vendedor é uma coluna, com uma linha cinza ligando os dois destinos. Ordem pela diferença, sem nome no eixo,
+    # porque o id do vendedor é um código sem sentido para quem lê.
+    eixo_x = alt.X("ordem:O", title="Vendedores, do que menos piora no RJ ao que mais piora", axis=None)
+    dica = [alt.Tooltip("vendedor_id", title="Vendedor"), alt.Tooltip("destino", title="Destino"),
+            alt.Tooltip("taxa", title="Atraso", format=".1%")]
+    ligacao = alt.Chart(pares).mark_rule(color=NEUTRO_CLARO, strokeWidth=1.5).encode(
+        x=eixo_x, y=alt.Y("taxa_b:Q"), y2="taxa_a:Q")
+    marcas = alt.Chart(pontos).mark_circle(size=34, opacity=0.9).encode(
+        x=eixo_x,
+        y=alt.Y("taxa:Q", title="Pedidos atrasados", axis=alt.Axis(format=".0%", tickCount=5)),
+        color=alt.Color("destino:N", title=None, scale=alt.Scale(domain=["Para SP", "Para o RJ"], range=[AZUL, DESTAQUE]),
+                        legend=alt.Legend(orient="top-left", direction="horizontal")),
+        tooltip=dica)
+    desenhar((ligacao + marcas).properties(height=300))
+    st.caption(f"Dois controles dão o mesmo resultado. Só vendedores de SP, o RJ atrasa {pct(rj_mg['media_a'])} contra "
+               f"{pct(rj_mg['media_b'])} em MG, que fica à mesma distância ({rj_mg['vendedores']} vendedores). "
+               f"Só vendedores de fora de RJ e SP, {pct(de_fora['media_a'])} contra {pct(de_fora['media_b'])} "
+               f"({de_fora['vendedores']} vendedores). Teste de Wilcoxon pareado, p de no máximo "
+               f"{num(max(rj_sp['p_valor'], rj_mg['p_valor'], de_fora['p_valor']), 4)} nos três. "
+               "Pedidos com mais de um vendedor ficam fora.")
+
 # Agregar por região exige média ponderada pelos pedidos. Média simples das taxas daria o mesmo peso a RR e SP.
-MEDIAS = ["prazo_medio", "entrega_media", "frete_medio"]
 por_regiao = (filtro.groupby("regiao")
-              .apply(lambda g: pd.Series({c: ponderada(g, c) for c in MEDIAS}), include_groups=False)
+              .apply(lambda g: pd.Series({"frete_medio": ponderada(g, "frete_medio")}), include_groups=False)
               .reset_index())
-por_regiao["folga"] = por_regiao.prazo_medio - por_regiao.entrega_media
+faixa = ler("entrega_por_regiao").query("regiao in @regioes")
 
 
 def barras_regiao(coluna, titulo_eixo, formato, dica):
@@ -71,8 +106,22 @@ def barras_regiao(coluna, titulo_eixo, formato, dica):
 
 c1, c2 = st.columns(2)
 with c1:
-    with painel("Folga entre prometido e real", "folga", "Dias que o pedido chega, em média, antes da data prometida."):
-        desenhar(barras_regiao("folga", "Dias de folga", "d", "Folga (dias)"))
+    with painel("A entrega é menos previsível no Norte e no Nordeste", "faixa",
+                "Dias entre a entrega e a data prometida. A barra vai do pedido mais adiantado ao mais atrasado entre os "
+                "80% do meio (p10 a p90), e o traço é a mediana. Negativo é adiantado."):
+        # Faixa em vez de média. A média esconde que a mesma região tem pedido 24 dias adiantado e pedido atrasado.
+        eixo_y = alt.Y("regiao:N", title=None, sort=alt.EncodingSortField("p90", order="descending"))
+        dica = [alt.Tooltip("regiao", title="Região"), alt.Tooltip("pedidos", title="Pedidos", format=","),
+                alt.Tooltip("p10", title="p10 (dias)"), alt.Tooltip("p50", title="Mediana (dias)"),
+                alt.Tooltip("p90", title="p90 (dias)")]
+        barra = alt.Chart(faixa).mark_bar(color=AZUL, opacity=0.35, cornerRadius=4, size=22).encode(
+            y=eixo_y, x=alt.X("p10:Q", title="Dias em relação ao prometido", axis=alt.Axis(tickCount=6)), x2="p90:Q",
+            tooltip=dica)
+        mediana = alt.Chart(faixa).mark_tick(color=AZUL, thickness=3, size=22).encode(y=eixo_y, x="p50:Q", tooltip=dica)
+        prometido = alt.Chart(pd.DataFrame({"x": [0]}))
+        desenhar((barra + mediana + prometido.mark_rule(color=DESTAQUE, strokeDash=[4, 3]).encode(x="x:Q")
+                  + prometido.mark_text(text="dia prometido", align="left", dx=4, dy=-6, color=DESTAQUE, fontSize=11)
+                  .encode(x="x:Q", y=alt.value(0))).properties(height=220))
 with c2:
     with painel("Frete médio por pedido", "frete", "Valor do frete somado por pedido, em reais."):
         desenhar(barras_regiao("frete_medio", "Frete médio", "$,.0f", "Frete (R$)"))
