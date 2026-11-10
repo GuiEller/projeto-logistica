@@ -112,7 +112,9 @@ def desenhar_regioes(grafico, chave: str):
 
     def ao_clicar():
         marcadas = st.session_state[chave].selection.get("regiao", [])
-        if marcadas:
+        if marcadas and regioes == [marcadas[0]["regiao"]]:
+            st.session_state["regioes"] = TODAS  # segundo clique na região única volta a todas
+        elif marcadas:
             st.session_state["regioes"] = [marcadas[0]["regiao"]]
             if uf and regiao_do_estado != marcadas[0]["regiao"]:
                 escolher_estado(None)

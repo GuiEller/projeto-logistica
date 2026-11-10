@@ -289,6 +289,11 @@ def estado_escolhido() -> str | None:
     return st.session_state.get("filtro_uf")
 
 
+def alternar(atual, clicado):
+    """Clicar de novo no que já está escolhido desfaz a escolha. Clique em outro item troca. Sem clique, limpa."""
+    return None if clicado == atual else clicado
+
+
 def escolher_estado(uf: str | None):
     st.session_state["filtro_uf"] = uf
     st.session_state["seletor_uf"] = uf or BRASIL
@@ -297,13 +302,13 @@ def escolher_estado(uf: str | None):
 def desenhar_clicavel(grafico, chave: str, parametros: tuple = ("uf", "uf_sigla"), campo: str = "estado"):
     """Desenha um gráfico em que o clique escolhe o estado do filtro. Lê a primeira seleção marcada."""
     # A chave muda com o estado escolhido. Assim a seleção interna do gráfico zera quando o filtro muda pela caixa,
-    # e clicar no mesmo estado depois de voltar ao Brasil inteiro ainda funciona.
+    # e o segundo clique no mesmo estado chega ao callback como um clique novo, que o alternar transforma em limpar.
     chave = f"{chave}-{estado_escolhido()}"
 
     def ao_clicar():
         selecao = st.session_state[chave].selection
         marcados = [m for p in parametros for m in selecao.get(p, [])]
-        escolher_estado(marcados[0][campo] if marcados else None)
+        escolher_estado(alternar(estado_escolhido(), marcados[0][campo] if marcados else None))
 
     # O Altair sobe as seleções das camadas para o topo do gráfico. Só as que existem entram no selection_mode.
     presentes = [p["name"] for p in grafico.to_dict().get("params", [])]
@@ -326,7 +331,7 @@ def barra_de_filtro(pedidos_por_estado: pd.Series, base: str) -> str | None:
         botao.button("Ver Brasil inteiro", on_click=escolher_estado, args=(None,), width="stretch")
         n = int(pedidos_por_estado.get(uf, 0))
         aviso = " Amostra pequena, leia com cuidado." if n < 300 else ""
-        frase.caption(f"Filtrando {uf}, com {num(n)} {base}.{aviso}")
+        frase.caption(f"Filtrando {uf}, com {num(n)} {base}.{aviso} Clique de novo no estado para voltar ao Brasil inteiro.")
     else:
         frase.caption("Clique num estado do mapa ou escolha na lista para filtrar a página.")
     return uf

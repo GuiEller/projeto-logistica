@@ -6,7 +6,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from dados import (AZUL, CINZA, DESTAQUE, TINTA, conclusao, desenhar, desenhar_clicavel, estado_escolhido, ler,
+from dados import (AZUL, CINZA, DESTAQUE, TINTA, alternar, conclusao, desenhar, desenhar_clicavel, estado_escolhido, ler,
                    mes_br, num, painel, pct, ponderada, resumo, rodape, tamanho_amostra)
 
 st.title("Quanto dá para confiar nos achados?")
@@ -83,7 +83,7 @@ def desenhar_mes(grafico, chave: str, parametro: str):
 
     def ao_clicar():
         marcados = st.session_state[chave].selection.get(parametro, [])
-        st.session_state["filtro_mes"] = marcados[0]["ano_mes"] if marcados else None
+        st.session_state["filtro_mes"] = alternar(mes, marcados[0]["ano_mes"] if marcados else None)
 
     st.altair_chart(grafico.add_params(alt.selection_point(name=parametro, fields=["ano_mes"], on="click")),
                     width="stretch", theme=None, key=chave, on_select=ao_clicar, selection_mode=parametro)
@@ -91,7 +91,7 @@ def desenhar_mes(grafico, chave: str, parametro: str):
 with painel("Nos meses em que o atraso subiu, a nota caiu", "serie",
             f"Correlação de Pearson de {num(r_mes, 2)} (IC 95% de {num(r_mes_min, 2)} a {num(r_mes_max, 2)}), "
             f"com 20 meses. Em tom escuro, os meses fora do padrão ({meses_crise}). "
-            "Clique num mês para acendê-lo nos dois gráficos."):
+            "Clique num mês para acendê-lo nos dois gráficos, e de novo para desfazer."):
     # Dois gráficos empilhados com o mesmo eixo de meses, no lugar de um gráfico de dois eixos.
     # Dois eixos no mesmo gráfico deixam a escala decidir se as linhas parecem andar juntas.
     eixo_x = alt.X("mes:O", sort=None, title=None, axis=alt.Axis(labelAngle=0, labelOverlap=True))

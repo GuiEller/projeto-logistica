@@ -129,3 +129,13 @@ def test_logistica_mostra_o_estado_mesmo_abaixo_do_minimo(monkeypatch):
     at.run()
     assert not at.exception
     assert any("RR" in c.value for c in at.caption)
+
+
+def test_alternar_segundo_clique_limpa(monkeypatch):
+    monkeypatch.syspath_prepend(str(APP))
+    from dados import alternar
+    assert alternar(None, "AL") == "AL"      # primeiro clique escolhe
+    assert alternar("AL", "AL") is None      # segundo clique no mesmo desfaz
+    assert alternar("AL", "SP") == "SP"      # outro item troca
+    assert alternar("AL", None) is None      # clicar no vazio limpa
+    assert alternar(None, None) is None
