@@ -68,6 +68,42 @@ def ponderada(df: pd.DataFrame, coluna: str) -> float:
     return (df[coluna] * df.pedidos).sum() / df.pedidos.sum()
 
 
+def comparar_destinos(tabela: pd.DataFrame, destino_a: str, destino_b: str, minimo: int = 20,
+                      origem: str | None = None, fora_dos_destinos: bool = False) -> dict:
+    """Compara o atraso do MESMO vendedor para dois destinos (tabela atraso_vendedor_destino).
+
+    Pareado porque assim a diferença não vem de quem vende, vem do caminho até o cliente.
+    Vendedor só entra com `minimo` pedidos em cada destino. Com 3 pedidos, uma entrega atrasada vira 33%.
+    """
+    from scipy.stats import wilcoxon  # importado aqui para as páginas que não comparam não pagarem o custo
+
+    t = tabela
+    if origem is not None:
+        t = t[t.estado_vendedor == origem]
+    if fora_dos_destinos:
+        # Vendedor do próprio destino entrega na vizinhança e puxaria a taxa daquele destino para baixo.
+        t = t[~t.estado_vendedor.isin([destino_a, destino_b])]
+    larga = t.pivot_table(index="vendedor_id", columns="estado", values=["pedidos", "atrasos"], aggfunc="sum")
+    if larga.empty or destino_a not in larga["pedidos"] or destino_b not in larga["pedidos"]:
+        larga = pd.DataFrame(columns=pd.MultiIndex.from_product([["pedidos", "atrasos"], [destino_a, destino_b]]))
+    larga = larga[(larga["pedidos"][destino_a] >= minimo) & (larga["pedidos"][destino_b] >= minimo)]
+    taxa = larga["atrasos"] / larga["pedidos"]
+    pares = pd.DataFrame({"vendedor_id": larga.index, "taxa_a": taxa[destino_a].astype(float).values,
+                          "taxa_b": taxa[destino_b].astype(float).values})
+    # Com menos de 6 pares o Wilcoxon bilateral não chega a p < 0,05 nem no melhor caso. Sem teste, sem p-valor.
+    p = wilcoxon(pares.taxa_a, pares.taxa_b).pvalue if len(pares) >= 6 else float("nan")
+    soma = larga.sum()
+    return {
+        "vendedores": len(pares),
+        # Média das taxas dá o mesmo peso a cada vendedor. A taxa somada pesa pelo volume. O relatório mostra as duas.
+        "media_a": pares.taxa_a.mean(), "media_b": pares.taxa_b.mean(),
+        "taxa_a": soma["atrasos"][destino_a] / soma["pedidos"][destino_a] if len(pares) else float("nan"),
+        "taxa_b": soma["atrasos"][destino_b] / soma["pedidos"][destino_b] if len(pares) else float("nan"),
+        "p_valor": float(p),
+        "pares": pares,
+    }
+
+
 def num(x, casas=0):
     return f"{x:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
