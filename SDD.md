@@ -247,7 +247,7 @@ As sete tabelas do relatório e do filtro por estado são conferidas linha a lin
 | Visão geral | Como o negócio está indo? | receita, pedidos, ticket médio e nota média, com variação mês a mês |
 | Vendas | De onde vem a receita? | evolução mensal, curva ABC, recompra de 3% |
 | Logística | Onde a entrega falha? | atraso por estado, folga entre prometido e real, frete por região |
-| Cliente | O atraso derruba a nota? | nota por faixa de atraso e o resultado do teste de hipótese |
+| Cliente | O atraso derruba a nota? | nota por faixa de atraso e a curva de dias de atraso (o teste de hipótese fica no relatório, não na tela) |
 | Recomendações | O que fazer primeiro? | as 4 ações com o número que sustenta cada uma |
 | Relatório | Quanto dá para confiar nos achados? | atraso e nota por mês e por estado, impacto de cada ação, tamanho do teste A/B e a base de cada número |
 

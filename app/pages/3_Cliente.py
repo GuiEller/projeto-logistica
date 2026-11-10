@@ -87,18 +87,6 @@ with painel("A nota despenca já nos primeiros dias de atraso", "nota-dia",
     st.caption(f"De 7 a 15 dias de atraso, {pct(semana.notas_baixas.sum() / semana.pedidos.sum())} das avaliações são "
                "nota 1 ou 2. O estrago acontece nos três primeiros dias, então o aviso ao cliente precisa sair antes disso.")
 
-with painel("Teste de hipótese", "hipotese"):
-    st.markdown(
-        "A diferença de nota pode ser acaso? Para responder, o projeto rodou dois testes sobre os pedidos entregues "
-        "e avaliados.\n\n"
-        "- **Mann-Whitney U unilateral**, porque a nota vai de 1 a 5 e não segue distribuição normal, então o teste t "
-        "não serve. p-valor abaixo de 0,0001 e efeito grande (rank-biserial de 0,64).\n"
-        "- **Qui-quadrado** para a proporção de notas 1 e 2, também com p-valor abaixo de 0,0001.\n\n"
-        "Com alfa de 5%, a hipótese nula é rejeitada nos dois. O teste mostra associação, não prova causa sozinho, "
-        "mas a nota cai de forma consistente a cada faixa de atraso, o que reforça a leitura. "
-        "O relatório completo está em `resultados/teste_hipotese.md` no repositório."
-    )
-
 conclusao(
     f"Os pedidos atrasados são só {pct(razao(atrasados.pedidos.sum(), faixas.pedidos.sum()))} do total{onde}, mas "
     f"respondem por {pct(razao(atrasados.notas_baixas.sum(), faixas.notas_baixas.sum()))} de todas as notas 1 e 2. "
