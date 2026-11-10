@@ -103,7 +103,13 @@ with esq:
     with painel("Estados que atrasam mais têm nota menor", "dispersao",
                 f"Correlação de Spearman de {num(r_uf, 2)} (IC 95% de {num(r_uf_min, 2)} a {num(r_uf_max, 2)}), "
                 "com 27 estados. O tamanho do ponto é o número de pedidos."):
-        base = alt.Chart(estados.assign(destaque=estados.estado == "RJ")).encode(
+        # Sigla só onde ajuda a ler. Os 4 estados com mais pedidos, os 3 que mais atrasam e o que menos atrasa.
+        # O resto aparece no tooltip. Com sigla nos 27, PR cai em cima de SP, AP em cima de AM e nenhuma fica legível.
+        com_sigla = (set(estados.nlargest(4, "pedidos").estado) | set(estados.nlargest(3, "taxa_atraso").estado)
+                     | set(estados.nsmallest(1, "taxa_atraso").estado))
+        rotulados = estados.assign(destaque=estados.estado == "RJ",
+                                   rotulo=estados.estado.where(estados.estado.isin(com_sigla), ""))
+        base = alt.Chart(rotulados).encode(
             x=alt.X("taxa_atraso:Q", title="Pedidos atrasados", axis=alt.Axis(format=".0%", tickCount=5)),
             # Domínio fixo com folga em cima, para a sigla de SP não sair do gráfico e o eixo andar de 0,1 em 0,1.
             y=alt.Y("nota_media:Q", title="Nota média", scale=alt.Scale(domain=[3.8, 4.4]),
@@ -115,23 +121,35 @@ with esq:
         pontos = base.mark_circle(opacity=0.75).encode(
             size=alt.Size("pedidos:Q", legend=None, scale=alt.Scale(range=[30, 900])),
             color=alt.condition("datum.destaque", alt.value(DESTAQUE), alt.value(AZUL)))
-        # Sigla em todo ponto, porque a cor sozinha não diz qual estado é qual.
-        siglas = base.mark_text(dy=-11, fontSize=11, color=CINZA).encode(text="estado:N")
+        # Sigla acima do ponto. SP tem círculo grande e sobe mais. MG fica logo abaixo de SP, então desce.
+        sigla = lambda filtro, dy: base.transform_filter(filtro).mark_text(dy=dy, fontSize=11, color=CINZA).encode(text="rotulo:N")
+        siglas = (sigla("datum.estado != 'SP' && datum.estado != 'MG'", -11)
+                  + sigla("datum.estado == 'SP'", -24) + sigla("datum.estado == 'MG'", 16))
         desenhar((pontos + siglas).properties(height=340))
-        st.caption("Laranja marca o RJ. Correlação entre estados não fala de cada pedido, mas confirma no mapa o que "
+        st.caption("Laranja marca o RJ. Sigla nos 4 estados com mais pedidos, nos 3 que mais atrasam e no que menos atrasa. "
+                   "Correlação entre estados não fala de cada pedido, mas confirma no mapa o que "
                    "o teste de hipótese mostrou pedido a pedido.")
 with dir:
     with painel("Quanto cada ação rende em notas 1 e 2", "impacto",
                 # Diferença entre duas proporções se fala em pontos percentuais. "53,2% a menos" seria outra conta.
                 f"Cada atraso evitado tira {num(100 * diferenca, 1)} pontos percentuais da chance de nota 1 ou 2, a diferença entre "
                 f"atrasado ({pct(nota_baixa_atraso)}) e no prazo. Base de {num(notas_baixas)} notas 1 e 2."):
-        # st.table em vez de st.dataframe porque a tabela quebra o cabeçalho e cabe na coluna sem rolagem lateral.
-        st.table(pd.DataFrame({
-            "Cenário": cenarios.cenario,
-            "Atrasos a menos": cenarios.atrasos_evitados.map(num),
-            "Notas 1 e 2 a menos": cenarios.notas_baixas_evitadas.map(num),
-            "Do total de notas 1 e 2": cenarios.parcela.map(pct),
-        }).set_index("Cenário"))
+        # Barra em vez de tabela, porque a comparação entre cenários é de tamanho e o olho compara comprimento na hora.
+        barras = alt.Chart(cenarios.assign(
+            rotulo=cenarios.notas_baixas_evitadas.map(num) + " (" + cenarios.parcela.map(pct) + " do total)",
+        )).encode(
+            y=alt.Y("cenario:N", sort="-x", title=None, axis=alt.Axis(labelLimit=220)),
+            # Folga à direita do eixo para o rótulo da maior barra caber dentro do gráfico.
+            x=alt.X("notas_baixas_evitadas:Q", title="Notas 1 e 2 a menos",
+                    scale=alt.Scale(domain=[0, 1.6 * cenarios.notas_baixas_evitadas.max()]), axis=alt.Axis(tickCount=4)),
+            tooltip=[alt.Tooltip("cenario", title="Cenário"),
+                     alt.Tooltip("atrasos_evitados", title="Atrasos a menos", format=",.0f"),
+                     alt.Tooltip("notas_baixas_evitadas", title="Notas 1 e 2 a menos", format=",.0f"),
+                     alt.Tooltip("parcela", title="Do total de notas 1 e 2", format=".1%")],
+        )
+        desenhar((barras.mark_bar(color=AZUL, cornerRadiusEnd=3, height=28)
+                  + barras.mark_text(align="left", dx=6, fontSize=12, color=TINTA).encode(text="rotulo:N"))
+                 .properties(height=200))
         st.caption("Estimativa que supõe que o pedido que deixa de atrasar passa a ser avaliado como um pedido no prazo. "
                    "O teste mostra associação, então o número real tende a ser menor.")
 
@@ -144,6 +162,16 @@ with painel("Quanto tempo leva o teste A/B do aviso de atraso", "ab",
     a1.metric("Pedidos atrasados por grupo", num(n), **kpi)
     a2.metric("Total no teste", num(2 * n), **kpi)
     a3.metric("Meses de coleta", num(2 * n / atrasados_mes, 1), **kpi)
+    # A curva mostra o preço de cada escolha. Pedir para enxergar 3 pontos custa quase três vezes o tempo de 5 pontos.
+    curva = pd.DataFrame({"queda": range(3, 16)})
+    curva["meses"] = [2 * tamanho_amostra(nota_baixa_atraso, nota_baixa_atraso - q / 100) / atrasados_mes for q in curva.queda]
+    eixos = dict(x=alt.X("queda:Q", title="Queda mínima na nota 1 ou 2 (pontos percentuais)",
+                         scale=alt.Scale(domain=[3, 15]), axis=alt.Axis(tickCount=13, format="d")),
+                 y=alt.Y("meses:Q", title="Meses de coleta", axis=alt.Axis(tickCount=5)),
+                 tooltip=[alt.Tooltip("queda", title="Queda (pontos)"), alt.Tooltip("meses", title="Meses", format=".1f")])
+    desenhar((alt.Chart(curva).mark_line(color=AZUL, strokeWidth=2.5, point=alt.OverlayMarkDef(color=AZUL, size=30)).encode(**eixos)
+              + alt.Chart(curva[curva.queda == queda]).mark_point(filled=True, size=160, color=DESTAQUE).encode(**eixos))
+             .properties(height=220))
     st.caption(f"Em 2018 atrasaram cerca de {num(atrasados_mes)} pedidos por mês, e só eles entram no teste. "
                "Efeito pequeno pede amostra grande, então ou o teste mira uma queda maior ou roda por mais tempo.")
 

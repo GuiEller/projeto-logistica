@@ -46,3 +46,13 @@ def test_menu_abre_na_visao_geral(monkeypatch):
     assert not at.exception
     # A primeira página abre com a descoberta principal, não com o nome do projeto.
     assert at.title[0].value == "O atraso na entrega é o que mais derruba a nota"
+
+
+def test_relatorio_mantem_os_numeros_do_ab(monkeypatch):
+    # Protege os números enquanto os gráficos da página mudam. Queda padrão de 5 pontos.
+    monkeypatch.syspath_prepend(str(APP))
+    at = AppTest.from_file(str(APP / "pages/5_Relatorio.py"), default_timeout=30).run()
+    assert not at.exception
+    cartoes = {m.label: m.value for m in at.metric}
+    assert cartoes["Meses de coleta"] == "5,8"
+    assert cartoes["Pedidos atrasados por grupo"] == "1.507"
