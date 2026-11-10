@@ -119,3 +119,13 @@ def test_visao_geral_sem_filtro_bate_com_o_resumo(monkeypatch):
     assert valores[0] == pct(r.pct_atrasados)
     assert valores[1] == pct(r.parcela_notas_baixas_atraso)
     assert valores[3] == pct(r.pct_recompra)
+
+
+def test_logistica_mostra_o_estado_mesmo_abaixo_do_minimo(monkeypatch):
+    # RR tem 40 pedidos, abaixo do mínimo padrão de 300. Escolhido no mapa, ele não pode sumir da página.
+    monkeypatch.syspath_prepend(str(APP))
+    at = AppTest.from_file(str(APP / "pages/2_Logistica.py"), default_timeout=30)
+    at.session_state["filtro_uf"] = "RR"
+    at.run()
+    assert not at.exception
+    assert any("RR" in c.value for c in at.caption)

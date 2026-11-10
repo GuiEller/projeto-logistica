@@ -4,18 +4,23 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from dados import (AZUL, DESTAQUE, NEUTRO_CLARO, comparar_destinos, conclusao, desenhar, ler, mapa_atraso, num,
-                   painel, pct, ponderada, rodape)
+from dados import (AZUL, DESTAQUE, NEUTRO_CLARO, barra_de_filtro, comparar_destinos, conclusao, desenhar,
+                   desenhar_clicavel, escolher_estado, ler, mapa_atraso, num, painel, pct, ponderada, rodape)
 
 st.title("Onde a entrega falha?")
 
 estados = ler("entrega_por_estado")
 estados["atrasos"] = estados.pedidos * estados.taxa_atraso
+uf = barra_de_filtro(estados.set_index("estado").pedidos, "pedidos entregues")
+TODAS = sorted(estados.regiao.unique())
+# A lista de regiões mora no session_state porque o clique numa barra de região também escreve nela.
+st.session_state.setdefault("regioes", TODAS)
 f1, f2 = st.columns(2)
-regioes = f1.multiselect("Regiões", sorted(estados.regiao.unique()), default=sorted(estados.regiao.unique()))
+regioes = f1.multiselect("Regiões", TODAS, key="regioes")
 # Estado com poucos pedidos tem taxa instável. 300 é o mesmo corte da análise SQL 06.
 minimo = f2.slider("Mínimo de pedidos por estado", 0, 2000, 300, step=50)
-filtro = estados[estados.regiao.isin(regioes) & (estados.pedidos >= minimo)].copy()
+# O estado escolhido no clique fica na tela mesmo fora dos filtros. Escolher e ver sumir seria pior que o aviso.
+filtro = estados[(estados.regiao.isin(regioes) & (estados.pedidos >= minimo)) | (estados.estado == uf)].copy()
 
 if filtro.empty:
     st.warning("Nenhum estado com esses filtros.")
@@ -30,7 +35,7 @@ mapa, ranking = st.columns([4, 3])
 with mapa:
     with painel("Atraso por estado", "mapa-logistica",
                 "Parcela dos pedidos entregue depois da data prometida. Cinza é estado fora do filtro."):
-        desenhar(mapa_atraso(filtro, altura=460))
+        desenhar_clicavel(mapa_atraso(filtro, altura=460, uf=uf), "mapa-logistica")
 with ranking:
     parte_rj = (f"Laranja marca o RJ, com {pct(rj.pedidos / estados.pedidos.sum())} dos pedidos "
                 f"e {pct(rj.atrasos / estados.atrasos.sum())} dos atrasos.")
@@ -45,11 +50,13 @@ with ranking:
                      alt.Tooltip("prazo_medio", title="Prazo prometido (dias)", format=".1f"),
                      alt.Tooltip("nota_media", title="Nota média", format=".2f")],
         )
-        barras = base.mark_bar(cornerRadiusEnd=4).encode(
-            color=alt.condition("datum.destaque", alt.value(DESTAQUE), alt.value(AZUL)))
+        barras = base.mark_bar(cornerRadiusEnd=4, size=14, cursor="pointer").encode(
+            color=alt.condition("datum.destaque", alt.value(DESTAQUE), alt.value(AZUL)),
+            opacity=alt.condition(f"datum.estado == '{uf}'" if uf else "true", alt.value(1), alt.value(0.3)),
+        ).add_params(alt.selection_point(name="uf", fields=["estado"], on="click"))
         valores = base.mark_text(align="left", dx=4, fontSize=11, color="#5f6672").encode(
             text=alt.Text("taxa_atraso:Q", format=".1%"))
-        desenhar((barras + valores).properties(height=max(260, 20 * len(filtro))))
+        desenhar_clicavel((barras + valores).properties(height=max(260, 20 * len(filtro))), "ranking")
 
 # O mesmo vendedor entregando para RJ e para SP. Não depende dos filtros da página, porque compara vendedores, não estados.
 vendedor = ler("atraso_vendedor_destino")
@@ -79,6 +86,8 @@ with painel("O mesmo vendedor atrasa mais para o RJ", "vendedores",
                         legend=alt.Legend(orient="top-left", direction="horizontal")),
         tooltip=dica)
     desenhar((ligacao + marcas).properties(height=300))
+    if uf and uf not in ("RJ", "SP"):
+        st.caption(f"A comparação pelo mesmo vendedor é o achado do RJ e não muda com o estado escolhido ({uf}).")
     st.caption(f"Dois controles dão o mesmo resultado. Só vendedores de SP, o RJ atrasa {pct(rj_mg['media_a'])} contra "
                f"{pct(rj_mg['media_b'])} em MG, que fica mais longe de SP do que o RJ ({rj_mg['vendedores']} vendedores). "
                f"Só vendedores de fora de RJ e SP, {pct(de_fora['media_a'])} contra {pct(de_fora['media_b'])} "
@@ -91,15 +100,33 @@ por_regiao = (filtro.groupby("regiao")
               .apply(lambda g: pd.Series({"frete_medio": ponderada(g, "frete_medio")}), include_groups=False)
               .reset_index())
 faixa = ler("entrega_por_regiao").query("regiao in @regioes")
+# Com estado escolhido, a região dele fica cheia e as outras apagadas. Faixa e frete só existem por região.
+regiao_do_estado = estados.set_index("estado").regiao.get(uf)
+cheia = alt.condition(f"datum.regiao == '{regiao_do_estado}'" if uf else "true", alt.value(1), alt.value(0.3))
+clique_regiao = alt.selection_point(name="regiao", fields=["regiao"], on="click")
+
+
+def desenhar_regioes(grafico, chave: str):
+    """Clique numa região filtra mapa e ranking por ela. Estado de outra região deixa de estar escolhido."""
+    chave = f"{chave}-{'-'.join(regioes)}-{uf}"
+
+    def ao_clicar():
+        marcadas = st.session_state[chave].selection.get("regiao", [])
+        if marcadas:
+            st.session_state["regioes"] = [marcadas[0]["regiao"]]
+            if uf and regiao_do_estado != marcadas[0]["regiao"]:
+                escolher_estado(None)
+
+    st.altair_chart(grafico, width="stretch", theme=None, key=chave, on_select=ao_clicar, selection_mode="regiao")
 
 
 def barras_regiao(coluna, titulo_eixo, formato, dica):
     return (
-        alt.Chart(por_regiao).mark_bar(color=AZUL, cornerRadiusEnd=4, size=26).encode(
-            y=alt.Y("regiao:N", sort="-x", title=None),
+        alt.Chart(por_regiao).mark_bar(color=AZUL, cornerRadiusEnd=4, size=26, cursor="pointer").encode(
+            y=alt.Y("regiao:N", sort="-x", title=None), opacity=cheia,
             x=alt.X(f"{coluna}:Q", title=titulo_eixo, axis=alt.Axis(tickCount=4, format=formato)),
             tooltip=[alt.Tooltip("regiao", title="Região"), alt.Tooltip(coluna, title=dica, format=".1f")],
-        ).properties(height=220)
+        ).add_params(clique_regiao).properties(height=220)
     )
 
 
@@ -113,21 +140,28 @@ with c1:
         dica = [alt.Tooltip("regiao", title="Região"), alt.Tooltip("pedidos", title="Pedidos", format=","),
                 alt.Tooltip("p10", title="p10 (dias)"), alt.Tooltip("p50", title="Mediana (dias)"),
                 alt.Tooltip("p90", title="p90 (dias)")]
-        barra = alt.Chart(faixa).mark_bar(color=AZUL, opacity=0.35, cornerRadius=4, size=22).encode(
+        barra = alt.Chart(faixa).mark_bar(color="#a9c1e8", cornerRadius=4, size=22, cursor="pointer").encode(
             y=eixo_y, x=alt.X("p10:Q", title="Dias em relação ao prometido", axis=alt.Axis(tickCount=6)), x2="p90:Q",
-            tooltip=dica)
+            opacity=cheia, tooltip=dica).add_params(clique_regiao)
         mediana = alt.Chart(faixa).mark_tick(color=AZUL, thickness=3, size=22).encode(y=eixo_y, x="p50:Q", tooltip=dica)
         prometido = alt.Chart(pd.DataFrame({"x": [0]}))
-        desenhar((barra + mediana + prometido.mark_rule(color=DESTAQUE, strokeDash=[4, 3]).encode(x="x:Q")
-                  + prometido.mark_text(text="dia prometido", align="left", dx=4, dy=-6, color=DESTAQUE, fontSize=11)
-                  .encode(x="x:Q", y=alt.value(0))).properties(height=220))
+        desenhar_regioes((barra + mediana + prometido.mark_rule(color=DESTAQUE, strokeDash=[4, 3]).encode(x="x:Q")
+                          + prometido.mark_text(text="dia prometido", align="left", dx=4, dy=-6, color=DESTAQUE,
+                                                fontSize=11).encode(x="x:Q", y=alt.value(0))).properties(height=220),
+                         "faixa-regiao")
 with c2:
     with painel("Frete médio por pedido", "frete", "Valor do frete somado por pedido, em reais."):
-        desenhar(barras_regiao("frete_medio", "Frete médio", "$,.0f", "Frete (R$)"))
+        desenhar_regioes(barras_regiao("frete_medio", "Frete médio", "$,.0f", "Frete (R$)"), "frete")
+if len(regioes) < len(TODAS):
+    st.button("Todas as regiões", on_click=lambda: st.session_state.update(regioes=TODAS))
 
 folga_geral = ponderada(estados, "prazo_medio") - ponderada(estados, "entrega_media")
 largura = ler("entrega_por_regiao").assign(l=lambda d: d.p90 - d.p10).set_index("regiao").l
+escolhido = estados.set_index("estado").loc[uf] if uf else None
 conclusao(
+    (f"{uf} atrasa {pct(escolhido.taxa_atraso)} dos pedidos entregues, contra "
+     f"{pct(estados.atrasos.sum() / estados.pedidos.sum())} no Brasil, e responde por "
+     f"{pct(escolhido.atrasos / estados.atrasos.sum())} dos atrasos do país. " if uf else "") +
     f"O RJ tem {pct(rj.pedidos / estados.pedidos.sum())} dos pedidos e {pct(rj.atrasos / estados.atrasos.sum())} dos atrasos, "
     f"e o mesmo vendedor atrasa {pct(rj_sp['media_a'])} para o RJ contra {pct(rj_sp['media_b'])} para SP. O problema do RJ "
     f"está na rota, não no vendedor. Nos filtros atuais, o pior estado é {pior.estado}, com {pct(pior.taxa_atraso)} de atraso. "
