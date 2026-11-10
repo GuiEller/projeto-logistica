@@ -1,0 +1,106 @@
+/* Visual do painel. Estilo "folha sobre moldura": a moldura cinza-azulada segura o menu e a folha branca segura a análise.
+   A profundidade vem só da troca de tom, sem sombra. Cor só nos dados (azul = principal, laranja = atraso).
+   Tipografia: Bricolage Grotesque nos títulos e números (um tom de voz próprio), Instrument Sans no texto.
+   As duas têm algarismos tabulares, então os números se alinham em coluna. */
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  --moldura: #e8ecf2;  --folha: #ffffff;  --bloco: #f5f7fa;  --borda: #dde2ea;  --controle: #c3cbd6;
+  --tinta: #0b0f14;    --suave: #4f5968;  /* 7:1 sobre branco e 6,3:1 sobre o bloco */
+  --azul: #1d5fbf;     --laranja: #d4581c;  --laranja-texto: #b3470f;
+  --titulo: "Bricolage Grotesque", "Instrument Sans", system-ui, sans-serif;
+  --raio: 14px;  --folga: 20px;
+}
+
+/* ---------- moldura e folha ---------- */
+.stApp { background: var(--moldura); }
+/* O menu tem o fundo da moldura. Sem ele, o conteúdo passava por baixo das abas ao rolar. */
+[data-testid="stHeader"] { background: var(--moldura); height: 3.5rem; }
+[data-testid="stMain"] { padding: 0 16px 16px; }
+.stMainBlockContainer {
+  max-width: 1840px; margin: 3.5rem auto 0; padding: 40px 48px 48px;
+  background: var(--folha); border: 1px solid var(--borda); border-radius: 18px;
+}
+
+/* ---------- menu no topo ---------- */
+[data-testid="stTopNavLink"] {
+  border-radius: 8px; padding: 6px 12px; font-size: 14px; font-weight: 500; color: var(--suave);
+  transition: background-color .15s, color .15s;
+}
+[data-testid="stTopNavLink"]:hover { background: rgba(11, 15, 20, .06); color: var(--tinta); }
+[data-testid="stTopNavLink"][aria-current="page"] { background: var(--folha); color: var(--tinta); font-weight: 600; }
+[data-testid="stTopNavLink"]:focus-visible, button:focus-visible, [role="slider"]:focus-visible {
+  outline: 2px solid var(--azul); outline-offset: 2px;
+}
+
+/* ---------- título e texto ---------- */
+h1, h2, h3, h4 { font-family: var(--titulo); color: var(--tinta); }
+h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; padding: 0 0 .35rem; }
+h4 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color: var(--suave); font-size: 14px; line-height: 1.5; }
+.stMarkdown p, .stMarkdown li { color: var(--tinta); line-height: 1.55; }
+.stMarkdown code { background: var(--bloco); color: var(--tinta); border-radius: 6px; }
+
+/* ---------- blocos: um passo de tom acima da folha, sem linha e sem sombra ---------- */
+[class*="st-key-painel"] {
+  background: var(--bloco); border: 0; border-radius: var(--raio); padding: 24px 28px;
+}
+[class*="st-key-painel"] [data-testid="stVerticalBlock"] { gap: .75rem; }
+/* A conclusão é o fecho da página: tinta cheia, texto branco, sem cor nova. */
+.st-key-painel-conclusao { background: var(--tinta); }
+.st-key-painel-conclusao p, .st-key-painel-conclusao strong { color: #f2f5f9; font-size: 1.05rem; line-height: 1.6; }
+.st-key-painel-conclusao p strong:first-child { color: #ffffff; font-family: var(--titulo); }
+
+/* ---------- faixa de indicadores: um bloco só, dividido por linhas finas ---------- */
+[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
+  gap: 0; background: var(--bloco); border-radius: var(--raio); overflow: hidden;
+}
+[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > [data-testid="stColumn"] { padding: 24px 28px; }
+[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > [data-testid="stColumn"] + [data-testid="stColumn"] {
+  border-left: 1px solid var(--borda);
+}
+[data-testid="stMetric"] { background: transparent; border: 0; padding: 0; }
+[data-testid="stMetricLabel"] p { color: var(--suave); font-size: 14px; font-weight: 500; }
+[data-testid="stMetricValue"] {
+  font-family: var(--titulo); font-size: 2.25rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15;
+  font-variant-numeric: tabular-nums; color: var(--tinta);
+}
+[data-testid="stMetricDelta"] { font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
+/* O primeiro indicador da Visão geral responde à pergunta da página e passa dos demais. */
+.st-key-kpis-lider [data-testid="stColumn"]:first-child [data-testid="stMetricValue"] { font-size: 3rem; color: var(--laranja-texto); }
+@media (max-width: 900px) {
+  [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > [data-testid="stColumn"] + [data-testid="stColumn"] {
+    border-left: 0; border-top: 1px solid var(--borda);
+  }
+}
+
+/* ---------- lista de ranking ao lado do mapa: a sigla, a barra fina e o valor ---------- */
+.rank-titulo { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: var(--tinta); }
+.rank { list-style: none; margin: 0; padding: 0; }
+.rank li { display: grid; grid-template-columns: 34px 1fr 64px; align-items: center; gap: 12px; padding: 11px 0; }
+.rank li + li { border-top: 1px solid var(--borda); }
+.rank .uf { font-family: var(--titulo); font-weight: 700; font-size: 1rem; color: var(--tinta); }
+.rank .barra { height: 8px; border-radius: 2px; background: var(--borda); overflow: hidden; }
+.rank .barra i { display: block; height: 100%; background: var(--laranja); }
+.rank .valor { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--tinta); }
+.rank-nota { margin: 10px 0 0; font-size: 13px; color: var(--suave); }
+
+/* ---------- assinatura no fecho da página ---------- */
+.assinatura { margin: 4px 0 0; font-size: 15px; color: var(--suave); }
+.assinatura strong { color: var(--tinta); font-family: var(--titulo); font-size: 1.05rem; }
+.assinatura a { color: var(--azul); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; margin-left: 6px; }
+.assinatura a:hover { color: var(--tinta); }
+
+/* ---------- controles ---------- */
+[data-baseweb="select"] > div, [data-baseweb="input"], [data-baseweb="base-input"] { border-radius: 10px; border-color: var(--controle); }
+[data-testid="stWidgetLabel"] p { font-size: 14px; font-weight: 600; color: var(--tinta); }
+.stButton > button, [data-testid="stBaseButton-secondary"] {
+  border-radius: 10px; border: 1px solid var(--controle); background: var(--folha); color: var(--tinta); font-weight: 600;
+  transition: background-color .15s, border-color .15s, transform .1s;
+}
+.stButton > button:hover { background: var(--bloco); border-color: var(--tinta); }
+.stButton > button:active { transform: scale(.98); }
+[data-testid="stSegmentedControl"] button { font-weight: 600; }
+
+/* ---------- gráficos: o mapa e as barras respondem ao ponteiro ---------- */
+[data-testid="stVegaLiteChart"], .stVegaLiteChart { border-radius: 10px; }

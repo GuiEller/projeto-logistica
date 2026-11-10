@@ -116,8 +116,9 @@ def test_visao_geral_sem_filtro_bate_com_o_resumo(monkeypatch):
     from dados import pct, resumo
     r = resumo()
     valores = [m.value for m in AppTest.from_file(str(APP / "visao_geral.py"), default_timeout=30).run().metric]
-    assert valores[0] == pct(r.pct_atrasados)
-    assert valores[1] == pct(r.parcela_notas_baixas_atraso)
+    # A nota média com atraso abre a faixa (índice 0). Os outros três seguem a ordem da tela.
+    assert valores[1] == pct(r.pct_atrasados)
+    assert valores[2] == pct(r.parcela_notas_baixas_atraso)
     assert valores[3] == pct(r.pct_recompra)
 
 
