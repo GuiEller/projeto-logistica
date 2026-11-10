@@ -288,7 +288,12 @@ PAINEL = ["kpis_mensais", "categorias_abc", "entrega_por_estado", "nota_por_faix
 for nome in PAINEL:
     df = spark.table(f"workspace.ouro.{nome}")
     df = df.select([F.col(c.name).cast("double") if isinstance(c.dataType, DecimalType) else F.col(c.name) for c in df.schema])
-    df.toPandas().to_parquet(f"{EXPORTACAO}/{nome}.parquet", index=False)
+    tabela = df.toPandas()
+    # No Serverless (Spark Connect), o toPandas guarda métricas da execução em attrs. O pandas
+    # tenta gravar attrs no Parquet como JSON e quebra com "PlanMetrics is not JSON serializable".
+    # As métricas não são dado, então saem antes de gravar.
+    tabela.attrs = {}
+    tabela.to_parquet(f"{EXPORTACAO}/{nome}.parquet", index=False)
     print(f"{nome}.parquet  {df.count()} linhas")
 
 display(spark.table("workspace.ouro.resumo"))
