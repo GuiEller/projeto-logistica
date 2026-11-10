@@ -148,11 +148,13 @@ flowchart LR
 
 **Conferência entre camadas** (`tests/test_conferencia.py`). Duas fontes que deveriam ser iguais e não foram conferidas são duas fontes de erro. O teste compara os Parquet da ouro com o PostgreSQL. Total de pedidos, receita e clientes, e mês a mês pedidos, clientes e receita. No CI, um job sobe o Postgres do zero, espera o "Integridade ok" e roda essa conferência.
 
-**Painel** (`app/`). Lê só os Parquet, então não depende de banco e não cai. Cada página responde uma pergunta e termina com a conclusão escrita, porque gráfico sem conclusão deixa a análise para o leitor.
+**Um erro que virou correção.** Na primeira execução da ouro no Serverless, a exportação quebrou com `Object of type PlanMetrics is not JSON serializable`. O `toPandas()` guarda métricas da execução em `df.attrs`, e o pandas tenta gravar esse campo dentro do Parquet. A ouro agora limpa o `attrs` antes de gravar.
+
+**Painel** (`app/`). Lê só os Parquet e a malha dos estados do IBGE, então não depende de banco nem de rede e não cai. Cada página responde uma pergunta e termina com a conclusão escrita, porque gráfico sem conclusão deixa a análise para o leitor. Os textos das conclusões são montados a partir dos números, para nunca divergirem deles. Números, eixos e meses saem no padrão brasileiro pelo `locale` do tema do Altair.
 
 | Página | Pergunta |
 |---|---|
-| Visão geral | Como o negócio está indo? |
+| Visão geral | Qual é a descoberta principal? |
 | Vendas | De onde vem a receita? |
 | Logística | Onde a entrega falha? |
 | Cliente | O atraso derruba a nota? |
