@@ -44,3 +44,11 @@ jobs:
           echo "Tempo esgotado sem Integridade ok"
           docker compose logs db
           exit 1
+      # Com o banco no ar, os Parquet da camada ouro (exportados do Databricks) são conferidos contra o Postgres.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Conferência da camada ouro contra o Postgres
+        run: pytest -v tests/test_conferencia.py
