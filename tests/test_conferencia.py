@@ -50,7 +50,9 @@ def analise_pg(arquivo):
     senão pg[pg.atrasado] filtraria texto em vez de booleano.
     """
     saida = subprocess.run(
-        ["docker", "exec", "-i", "olist-db", "psql", "-U", "postgres", "-d", "olist", "--csv", "-v", "ON_ERROR_STOP=1", "-f", "-"],
+        # Limite de 60 segundos por consulta. Um plano ruim (por exemplo, banco recém-criado e sem ANALYZE)
+        # vira falha com mensagem clara em vez de prender o CI por horas.
+        ["docker", "exec", "-i", "-e", "PGOPTIONS=-c statement_timeout=60s", "olist-db", "psql", "-U", "postgres", "-d", "olist", "--csv", "-v", "ON_ERROR_STOP=1", "-f", "-"],
         input=(RAIZ / "sql" / "analises" / arquivo).read_text(encoding="utf-8"),
         # UTF-8 explícito. No Windows o padrão é cp1252, os acentos dos comentários chegam
         # corrompidos e o psql descarta a consulta. ON_ERROR_STOP faz esse erro virar falha.
