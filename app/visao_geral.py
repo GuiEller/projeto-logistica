@@ -1,59 +1,61 @@
-"""Visão geral. Como o negócio está indo?"""
+"""Visão geral. A descoberta principal do projeto, em uma tela."""
 
 import altair as alt
 import streamlit as st
 
-from dados import AZUL, conclusao, ler, num, pct, reais, resumo, rodape
+from dados import AZUL, DESTAQUE, conclusao, desenhar, ler, mapa_atraso, num, painel, pct, ponderada, resumo, rodape
 
-st.set_page_config(page_title="Olist Logística", layout="wide")
-
-st.title("Olist Logística")
-st.markdown(
-    "O que mais pesa na satisfação do cliente de um marketplace, e por onde começar a agir? "
-    "Cerca de 100 mil pedidos reais da Olist, tratados em PostgreSQL e no Databricks."
-)
-
-kpis = ler("kpis_mensais").sort_values("ano_mes")
-meses = kpis.ano_mes.tolist()
-inicio, fim = st.select_slider("Período", options=meses, value=(meses[0], meses[-1]))
-periodo = kpis[(kpis.ano_mes >= inicio) & (kpis.ano_mes <= fim)]
-
-# Variação contra o mês anterior ao último do período. Mostra direção, não só o tamanho.
-ultimo = periodo.iloc[-1]
-anterior = periodo.iloc[-2] if len(periodo) > 1 else ultimo
-variacao = lambda c: pct(ultimo[c] / anterior[c] - 1) if anterior[c] else None
-
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Receita no período", reais(periodo.receita.sum()), variacao("receita"))
-c2.metric("Pedidos", num(periodo.pedidos.sum()), variacao("pedidos"))
-c3.metric("Ticket médio", reais(periodo.receita.sum() / periodo.pedidos.sum(), 2), variacao("ticket_medio"))
-# Nota média ponderada pelos pedidos de cada mês, para um mês pequeno não pesar igual a um grande.
-nota = (periodo.nota_media * periodo.pedidos).sum() / periodo.pedidos.sum()
-dif_nota = round(ultimo.nota_media - anterior.nota_media, 2)
-c4.metric("Nota média", num(nota, 2), num(dif_nota, 2) if dif_nota else None)
-st.caption(f"Variação de {fim} contra o mês anterior.")
-
-st.subheader("Receita mensal")
-grafico = (
-    alt.Chart(periodo)
-    .mark_line(color=AZUL, strokeWidth=2, point=alt.OverlayMarkDef(size=60, color=AZUL))
-    .encode(
-        x=alt.X("ano_mes:O", title=None),
-        y=alt.Y("receita:Q", title="Receita (R$)", axis=alt.Axis(format="~s")),
-        tooltip=[alt.Tooltip("ano_mes", title="Mês"), alt.Tooltip("receita", title="Receita", format=",.0f"),
-                 alt.Tooltip("pedidos", title="Pedidos"), alt.Tooltip("nota_media", title="Nota média", format=".2f")],
-    )
-    .properties(height=320)
-)
-st.altair_chart(grafico, width="stretch")
+st.title("O atraso na entrega é o que mais derruba a nota")
+st.markdown("Cerca de 100 mil pedidos reais da Olist, de janeiro de 2017 a agosto de 2018, "
+            "tratados em PostgreSQL e no Databricks.")
 
 r = resumo()
-inicio_2017 = kpis.loc[kpis.ano_mes == "2017-01", "receita"].iloc[0]
-media_2018 = kpis.loc[kpis.ano_mes.str.startswith("2018"), "receita"].mean()
+faixas = ler("nota_por_faixa").sort_values("faixa_atraso")
+# O prefixo "1. ", "2. " existe só para ordenar. Na tela, sai.
+faixas["situacao"] = faixas.faixa_atraso.str.split(". ", n=1).str[1]
+faixas["atrasado"] = faixas.faixa_atraso.str[0].astype(int) >= 3
+nota_prazo = ponderada(faixas[~faixas.atrasado], "nota_media")
+nota_atraso = ponderada(faixas[faixas.atrasado], "nota_media")
+
+c1, c2, c3, c4 = st.columns(4)
+# height="stretch" deixa os quatro cartões da mesma altura, mesmo quando só um tem a linha de variação.
+kpi = dict(border=True, height="stretch")
+c1.metric("Pedidos que chegaram atrasados", pct(r.pct_atrasados), **kpi)
+c2.metric("Notas 1 e 2 que vêm de atraso", pct(r.parcela_notas_baixas_atraso), **kpi)
+c3.metric("Nota média com atraso", num(nota_atraso, 2),
+          f"-{num(nota_prazo - nota_atraso, 2)} contra {num(nota_prazo, 2)} no prazo", **kpi)
+c4.metric("Clientes que voltaram a comprar", pct(r.pct_recompra), **kpi)
+
+esq, dir = st.columns([5, 4])
+with esq:
+    with painel("A nota cai a cada faixa de atraso", "faixas",
+                "Nota média dos pedidos entregues, da entrega antecipada ao atraso de mais de 7 dias."):
+        # Barras deitadas porque os nomes das faixas são longos. Em pé, os rótulos se atropelavam.
+        base = alt.Chart(faixas).encode(
+            y=alt.Y("situacao:N", sort=None, title=None, axis=alt.Axis(labelLimit=200, labelFontSize=13)),
+            x=alt.X("nota_media:Q", title="Nota média", scale=alt.Scale(domain=[0, 5]),
+                    axis=alt.Axis(format=".0f", tickCount=5)),
+            tooltip=[alt.Tooltip("situacao", title="Situação"), alt.Tooltip("pedidos", title="Pedidos", format=","),
+                     alt.Tooltip("nota_media", title="Nota média", format=".2f"),
+                     alt.Tooltip("pct_nota_baixa", title="Nota 1 ou 2", format=".1%")],
+        )
+        barras = base.mark_bar(cornerRadiusEnd=4, size=34).encode(
+            color=alt.condition("datum.atrasado", alt.value(DESTAQUE), alt.value(AZUL)))
+        valores = base.mark_text(align="left", dx=6, fontSize=14, fontWeight=700, color="#0a0a0a").encode(
+            text=alt.Text("nota_media:Q", format=".2f"))
+        desenhar((barras + valores).properties(height=300))
+        st.caption("Azul chegou no prazo, laranja chegou atrasado.")
+with dir:
+    with painel("Onde o atraso acontece", "mapa",
+                "Parcela dos pedidos de cada estado entregue depois da data prometida."):
+        desenhar(mapa_atraso(ler("entrega_por_estado"), altura=380))
+
+estados = ler("entrega_por_estado")
+nordeste = ponderada(estados[estados.regiao == "Nordeste"], "taxa_atraso")
 conclusao(
-    f"A receita cresceu {num(media_2018 / inicio_2017, 1)} vezes entre janeiro de 2017 e a média de 2018, "
-    f"quando estabilizou perto de {reais(media_2018 / 1000)} mil por mês. O crescimento veio de cliente novo. "
-    f"Só {pct(r.pct_recompra)} dos clientes compraram mais de uma vez, e o que mais derruba a nota é a entrega atrasada "
-    "(páginas Logística e Cliente)."
+    f"Só {pct(r.pct_atrasados)} dos pedidos atrasam, mas eles respondem por {pct(r.parcela_notas_baixas_atraso)} "
+    f"de todas as notas 1 e 2. A nota média cai de {num(nota_prazo, 2)} para {num(nota_atraso, 2)} quando o pedido "
+    f"atrasa. O Nordeste atrasa {pct(nordeste)} das entregas, quase o dobro da média, e o RJ junta muito volume "
+    "com atraso alto. As páginas seguintes mostram onde agir primeiro."
 )
 rodape()
