@@ -3,7 +3,7 @@
 import altair as alt
 import streamlit as st
 
-from dados import (AZUL, DESTAQUE, barra_de_filtro, conclusao, desenhar_clicavel, faixas_do_estado, ler, mapa_atraso,
+from dados import (AZUL, DESTAQUE, alternar, barra_de_filtro, conclusao, desenhar_clicavel, faixas_do_estado, ler, mapa_atraso,
                    num, painel, pct, razao, rodape)
 
 st.title("O atraso na entrega é o que mais derruba a nota")
@@ -43,7 +43,7 @@ esq, dir = st.columns([5, 4])
 with esq:
     with painel("A nota cai a cada faixa de atraso", "faixas",
                 f"Nota média dos pedidos entregues{onde}, da entrega antecipada ao atraso de mais de 7 dias. "
-                "Clique numa faixa para ver no mapa onde ela acontece."):
+                "Clique numa faixa para ver no mapa onde ela acontece, e de novo para desfazer."):
         # Barras deitadas porque os nomes das faixas são longos. Em pé, os rótulos se atropelavam.
         clique = alt.selection_point(name="faixa", fields=["faixa_atraso"], on="click")
         base = alt.Chart(faixas).encode(
@@ -66,7 +66,7 @@ with esq:
 
         def ao_clicar_na_faixa():
             marcadas = st.session_state[chave].selection.get("faixa", [])
-            st.session_state["filtro_faixa"] = marcadas[0]["faixa_atraso"] if marcadas else None
+            st.session_state["filtro_faixa"] = alternar(faixa, marcadas[0]["faixa_atraso"] if marcadas else None)
 
         st.altair_chart((barras + valores).properties(height=300), width="stretch", theme=None, key=chave,
                         on_select=ao_clicar_na_faixa, selection_mode="faixa")

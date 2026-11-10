@@ -4,7 +4,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from dados import (AZUL, DESTAQUE, barra_de_filtro, conclusao, desenhar, faixas_do_estado, ler, num, painel, pct,
+from dados import (AZUL, DESTAQUE, alternar, barra_de_filtro, conclusao, desenhar, faixas_do_estado, ler, num, painel, pct,
                    razao, rodape)
 
 st.title("O atraso derruba a nota?")
@@ -56,7 +56,7 @@ taxa_dia = dias.set_index("dias_atraso").taxa
 with painel("A nota despenca já nos primeiros dias de atraso", "nota-dia",
             f"Parcela de notas 1 e 2 por dia em relação à data prometida, no Brasil inteiro. No dia prometido é "
             f"{pct(taxa_dia[0])}. Com 1 dia de atraso sobe para {pct(taxa_dia[1])}, com 2 dias para {pct(taxa_dia[2])} "
-            f"e com 3 dias para {pct(taxa_dia[3])}. Clique num dia para acender a faixa dele acima."):
+            f"e com 3 dias para {pct(taxa_dia[3])}. Clique num dia para acender a faixa dele acima, e de novo para desfazer."):
     eixo_x = alt.X("dias_atraso:Q", title="Dias em relação à data prometida (negativo é adiantado)",
                    scale=alt.Scale(domain=[-10, 15]), axis=alt.Axis(tickCount=13, format="d"))
     eixo_y = alt.Y("taxa:Q", title="Notas 1 e 2", axis=alt.Axis(format=".0%", tickCount=5))
@@ -75,7 +75,7 @@ with painel("A nota despenca já nos primeiros dias de atraso", "nota-dia",
 
     def ao_clicar_no_dia():
         marcados = st.session_state[chave].selection.get("dia", [])
-        st.session_state["filtro_dia"] = int(marcados[0]["dias_atraso"]) if marcados else None
+        st.session_state["filtro_dia"] = alternar(dia, int(marcados[0]["dias_atraso"]) if marcados else None)
 
     st.altair_chart((linha(dias[~dias.atrasado], AZUL) + linha(dias[dias.dias_atraso >= 0], DESTAQUE) + pontos
                      + prometido.mark_rule(color="#a3a8b0", strokeDash=[4, 3]).encode(x="x:Q")

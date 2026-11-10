@@ -4,7 +4,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from dados import (AZUL, NEUTRO, NEUTRO_CLARO, categoria_br, conclusao, desenhar, eixo_reais_mi, estado_escolhido,
+from dados import (AZUL, NEUTRO, NEUTRO_CLARO, alternar, categoria_br, conclusao, desenhar, eixo_reais_mi, estado_escolhido,
                    ler, mes_br, num, painel, pct, ponderada, reais, resumo, rodape)
 
 st.title("De onde vem a receita?")
@@ -34,7 +34,7 @@ c3.metric("Ticket médio", reais(cartoes.receita.sum() / cartoes.pedidos.sum(), 
 c4.metric("Nota média", num(ponderada(cartoes, "nota_media"), 2), **kpi)
 
 with painel("Receita mensal", "receita", f"Soma do valor dos itens vendidos, de {mes_br(inicio)} a {mes_br(fim)}. "
-            "Clique num mês para ver os números dele nos cartões."):
+            "Clique num mês para ver os números dele nos cartões, e de novo para desfazer."):
     linha = alt.Chart(periodo).encode(
         x=alt.X("mes:T", title=None, axis=alt.Axis(format="%b/%y", labelAngle=0, tickCount="month", labelOverlap=True)),
         y=alt.Y("receita:Q", axis=eixo_reais_mi()),
@@ -51,7 +51,7 @@ with painel("Receita mensal", "receita", f"Soma do valor dos itens vendidos, de 
 
     def ao_clicar_no_mes():
         marcados = st.session_state[chave].selection.get("mes", [])
-        st.session_state["filtro_mes"] = marcados[0]["ano_mes"] if marcados else None
+        st.session_state["filtro_mes"] = alternar(mes, marcados[0]["ano_mes"] if marcados else None)
 
     st.altair_chart((linha.mark_line(color=AZUL, strokeWidth=2.5) + pontos).properties(height=300), width="stretch",
                     theme=None, key=chave, on_select=ao_clicar_no_mes, selection_mode="mes")
