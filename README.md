@@ -185,7 +185,7 @@ A base da Olist tem cerca de 100 mil pedidos e cabe numa máquina. Provar escala
 
 ## O que eu faria primeiro
 
-1. Rever a entrega até o cliente no RJ, que concentra quase um quarto dos atrasos. Transportadora, rota e última milha são os suspeitos, porque o mesmo vendedor atrasa bem menos para SP.
+1. Rever a entrega até o cliente no RJ, que concentra quase um quarto dos atrasos. Transportadora e rota são os suspeitos, porque o mesmo vendedor atrasa bem menos para SP.
 2. Prometer prazo por região, e não um prazo nacional.
 3. Avisar o cliente antes do primeiro dia de atraso, e validar o aviso com um experimento A/B.
 4. Criar um programa de segunda compra para os cerca de 14 mil clientes de alto valor que não voltaram.
