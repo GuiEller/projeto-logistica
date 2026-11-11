@@ -302,7 +302,7 @@ Estes números vêm do pipeline local e do teste de hipótese, e o painel precis
 
 ## 9. Recomendações de negócio
 
-1. Rever a entrega até o cliente no RJ (transportadora, rota, última milha), porque o vendedor foi descartado como causa.
+1. Rever a entrega até o cliente no RJ (transportadora e rota), porque o vendedor foi descartado como causa.
 2. Prometer prazo por região, e não um prazo nacional.
 3. Avisar o cliente antes do primeiro dia de atraso, testando com experimento A/B.
 4. Criar um programa de segunda compra para os cerca de 14 mil clientes de alto valor que não voltaram.

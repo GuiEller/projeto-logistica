@@ -23,7 +23,7 @@ acoes = [
      f"O RJ concentra {pct(rj.pedidos / estados.pedidos.sum())} dos pedidos e {pct(rj.atrasos / estados.atrasos.sum())} "
      f"dos atrasos. O mesmo vendedor atrasa {pct(vendedor['media_a'])} dos pedidos para o RJ e {pct(vendedor['media_b'])} "
      f"para SP ({vendedor['vendedores']} vendedores comparados), então o problema está no caminho até o cliente "
-     "(transportadora, rota, última milha), não em quem vende. Cobrar o vendedor não resolveria."),
+     "(transportadora e rota), não em quem vende. Cobrar o vendedor não resolveria."),
     ("2. Prometer prazo por região, e não um prazo nacional",
      f"O pedido médio chega {num(folga, 1)} dias antes do prometido, mas o Nordeste atrasa {pct(ponderada(nordeste, 'taxa_atraso'))} "
      f"das entregas contra {pct(sp.taxa_atraso)} em SP. A entrega no Nordeste também é menos previsível, com "

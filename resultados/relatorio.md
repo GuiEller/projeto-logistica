@@ -195,7 +195,7 @@ No prazo, as cinco regiões ficam entre 4,20 e 4,30. Atrasado, entre 2,14 e 2,37
 
 | Prioridade | Ação | Número que sustenta | Impacto estimado |
 |---|---|---|---|
-| 1 | Rever a entrega até o cliente no RJ (transportadora, rota, última milha) | 12,8% dos pedidos e 22,9% dos atrasos. O mesmo vendedor atrasa 12,2% para o RJ e 4,4% para SP | Cerca de 500 notas 1 e 2 a menos (4,1% do total) se o RJ atrasasse como SP. Cerca de 350 se chegasse à média nacional |
+| 1 | Rever a entrega até o cliente no RJ (transportadora e rota) | 12,8% dos pedidos e 22,9% dos atrasos. O mesmo vendedor atrasa 12,2% para o RJ e 4,4% para SP | Cerca de 500 notas 1 e 2 a menos (4,1% do total) se o RJ atrasasse como SP. Cerca de 350 se chegasse à média nacional |
 | 2 | Prometer prazo por região | Nordeste com a folga do Sudeste, o dobro de atraso e faixa de entrega de 27 dias contra 19 | Cerca de 290 notas 1 e 2 a menos se os estados do Nordeste chegassem à média nacional |
 | 3 | Avisar o cliente antes do primeiro dia de atraso, com teste A/B | Nota baixa vai de 12,4% no dia prometido para 34,3% com 2 dias de atraso | A medir no experimento abaixo |
 | 4 | Programa de segunda compra para clientes de alto valor | Recompra de 3,0%. Cerca de 14 mil clientes de alto valor compraram uma vez | Não estimado nesta rodada |
