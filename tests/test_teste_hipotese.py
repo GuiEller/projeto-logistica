@@ -25,8 +25,8 @@ def base():
 
 
 def test_formato_brasileiro():
-    assert th.br(13591643.7) == "13.591.643,70"
-    assert th.br(0.5, 1) == "0,5"
+    assert th.formatar_numero(13591643.7) == "13.591.643,70"
+    assert th.formatar_numero(0.5, 1) == "0,5"
 
 
 def test_carregar_converte_booleano_do_postgres_e_descarta_nulos(tmp_path, base):

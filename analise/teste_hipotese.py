@@ -1,13 +1,23 @@
 """
-Teste de hipótese. O atraso na entrega derruba a avaliação do cliente?
+TESTE DE HIPÓTESE. O atraso na entrega derruba a avaliação do cliente?
 
-Hipóteses
-  H1  A nota de pedidos entregues com atraso é menor que a de pedidos no prazo.
-      Teste de Mann-Whitney U unilateral (a nota é ordinal de 1 a 5, então não
-      dá para assumir normalidade e usar teste t). Tamanho de efeito pela
-      correlação rank-biserial.
-  H2  A proporção de notas 1 ou 2 é maior entre pedidos atrasados.
-      Teste qui-quadrado de independência e diferença de proporções com IC de 95%.
+EM PORTUGUÊS SIMPLES
+  Vimos que clientes com pedido atrasado parecem dar nota menor. Mas "parecer" não basta:
+  pode ser coincidência. Um teste de hipótese responde à pergunta "qual a chance de eu ver
+  uma diferença tão grande assim se o atraso NÃO tivesse efeito nenhum?". Quando essa chance
+  (o "p-valor") é minúscula, concluímos que a diferença é real.
+
+  Fazemos duas perguntas, uma com cada teste:
+
+  H1  A nota de pedidos atrasados é MENOR que a de pedidos no prazo?
+      Teste de Mann-Whitney U (unilateral). Por que ele e não o teste t, mais famoso?
+      Porque a nota é uma escala de 1 a 5 (ordem, não medida exata) e não segue a curva
+      "em sino" que o teste t exige. O Mann-Whitney compara as POSIÇÕES das notas.
+      O tamanho do efeito sai da correlação rank-biserial: perto de 0 não importa,
+      perto de 1 é enorme.
+  H2  A proporção de notas 1 ou 2 é MAIOR entre pedidos atrasados?
+      Teste qui-quadrado de independência, mais a diferença de proporções com intervalo
+      de confiança de 95% (a faixa onde a diferença real provavelmente está).
 
 Entrada  analise/dados/pedidos_entregues.csv  (gerado por scripts/exportar_csv.sh)
 Saída    resultados/teste_hipotese.md e dois gráficos em resultados/
@@ -16,7 +26,7 @@ Saída    resultados/teste_hipotese.md e dois gráficos em resultados/
 from pathlib import Path
 
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("Agg")  # desenha os gráficos direto em arquivo, sem abrir janela
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -25,103 +35,146 @@ from scipy import stats
 RAIZ = Path(__file__).resolve().parents[1]
 ENTRADA = RAIZ / "analise" / "dados" / "pedidos_entregues.csv"
 SAIDA = RAIZ / "resultados"
-ALFA = 0.05
+ALFA = 0.05  # nível de significância: aceitamos 5% de chance de errar ao "rejeitar H0"
 
 
-def br(x, casas=2):
-    """Formata número no padrão brasileiro."""
-    return f"{x:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+def formatar_numero(valor, casas=2):
+    """Escreve o número no padrão brasileiro: 13591643.7 vira '13.591.643,70'.
+
+    O Python formata com vírgula de milhar e ponto decimal (padrão americano). Para
+    inverter sem um separador atropelar o outro, trocamos por uma letra temporária 'X'.
+    """
+    return f"{valor:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def carregar(caminho=ENTRADA) -> pd.DataFrame:
+    """Lê o CSV e deixa a tabela pronta para os testes."""
     # O caminho é parâmetro para o pytest poder passar um CSV pequeno de teste.
-    df = pd.read_csv(caminho)
-    df = df.dropna(subset=["nota_avaliacao", "entregue_no_prazo"])
-    df["entregue_no_prazo"] = df["entregue_no_prazo"].astype(str).str.lower().isin(["t", "true", "1"])
-    df["atrasado"] = ~df["entregue_no_prazo"]
-    df["nota_baixa"] = df["nota_avaliacao"] <= 2
-    return df
+    pedidos = pd.read_csv(caminho)
+    # Sem nota ou sem saber se atrasou, o pedido não serve para comparar: sai da análise.
+    pedidos = pedidos.dropna(subset=["nota_avaliacao", "entregue_no_prazo"])
+    # O Postgres exporta verdadeiro/falso como o texto "t"/"f". Convertemos para True/False.
+    pedidos["entregue_no_prazo"] = (
+        pedidos["entregue_no_prazo"].astype(str).str.lower().isin(["t", "true", "1"])
+    )
+    pedidos["atrasado"] = ~pedidos["entregue_no_prazo"]          # "~" inverte: não no prazo = atrasado
+    pedidos["nota_baixa"] = pedidos["nota_avaliacao"] <= 2       # notas 1 e 2 são "ruins"
+    return pedidos
 
 
-def teste_mann_whitney(df):
-    atrasados = df.loc[df.atrasado, "nota_avaliacao"]
-    no_prazo = df.loc[~df.atrasado, "nota_avaliacao"]
-    u, p = stats.mannwhitneyu(atrasados, no_prazo, alternative="less")
-    # rank-biserial  r = 1 - 2U / (n1 n2)   (negativo = atrasados com notas menores)
-    r = 1 - 2 * u / (len(atrasados) * len(no_prazo))
+def teste_mann_whitney(pedidos):
+    """H1: as notas dos atrasados são menores que as dos pedidos no prazo?"""
+    notas_atrasados = pedidos.loc[pedidos.atrasado, "nota_avaliacao"]
+    notas_no_prazo = pedidos.loc[~pedidos.atrasado, "nota_avaliacao"]
+
+    # alternative="less" = teste unilateral: só interessa se os atrasados têm nota MENOR.
+    estatistica_u, valor_p = stats.mannwhitneyu(notas_atrasados, notas_no_prazo, alternative="less")
+
+    # Correlação rank-biserial, o "tamanho do efeito":  r = 1 - 2U / (n1 * n2).
+    # Sai negativa quando os atrasados têm notas menores; no resultado
+    # guardamos o sinal trocado.
+    correlacao = 1 - 2 * estatistica_u / (len(notas_atrasados) * len(notas_no_prazo))
+
     return {
-        "n_atrasados": len(atrasados), "n_no_prazo": len(no_prazo),
-        "media_atrasados": atrasados.mean(), "media_no_prazo": no_prazo.mean(),
-        "mediana_atrasados": atrasados.median(), "mediana_no_prazo": no_prazo.median(),
-        "u": u, "p": p, "rank_biserial": -r,
+        "n_atrasados": len(notas_atrasados), "n_no_prazo": len(notas_no_prazo),
+        "media_atrasados": notas_atrasados.mean(), "media_no_prazo": notas_no_prazo.mean(),
+        "mediana_atrasados": notas_atrasados.median(), "mediana_no_prazo": notas_no_prazo.median(),
+        "u": estatistica_u, "p": valor_p, "rank_biserial": -correlacao,
     }
 
 
-def teste_proporcoes(df):
-    tabela = pd.crosstab(df.atrasado, df.nota_baixa)
-    chi2, p, gl, _ = stats.chi2_contingency(tabela)
-    p_atr = df.loc[df.atrasado, "nota_baixa"].mean()
-    p_ok = df.loc[~df.atrasado, "nota_baixa"].mean()
-    n_atr, n_ok = df.atrasado.sum(), (~df.atrasado).sum()
-    dif = p_atr - p_ok
-    ep = np.sqrt(p_atr * (1 - p_atr) / n_atr + p_ok * (1 - p_ok) / n_ok)
-    # parcela de todas as notas baixas que vem de pedidos atrasados
-    parcela = df.loc[df.atrasado, "nota_baixa"].sum() / df["nota_baixa"].sum()
+def teste_proporcoes(pedidos):
+    """H2: a fatia de notas 1 e 2 é maior entre os atrasados?"""
+    # Tabela de contagem 2x2 (atrasou ou não x nota baixa ou não), que o qui-quadrado usa.
+    tabela_de_contagem = pd.crosstab(pedidos.atrasado, pedidos.nota_baixa)
+    qui_quadrado, valor_p, graus_de_liberdade, _ = stats.chi2_contingency(tabela_de_contagem)
+
+    proporcao_atrasados = pedidos.loc[pedidos.atrasado, "nota_baixa"].mean()    # % de notas baixas entre atrasados
+    proporcao_no_prazo = pedidos.loc[~pedidos.atrasado, "nota_baixa"].mean()    # % de notas baixas entre os no prazo
+    qtd_atrasados = pedidos.atrasado.sum()
+    qtd_no_prazo = (~pedidos.atrasado).sum()
+
+    diferenca = proporcao_atrasados - proporcao_no_prazo
+    # Erro padrão da diferença de duas proporções. Multiplicado por 1,96, dá a margem do IC de 95%.
+    erro_padrao = np.sqrt(
+        proporcao_atrasados * (1 - proporcao_atrasados) / qtd_atrasados
+        + proporcao_no_prazo * (1 - proporcao_no_prazo) / qtd_no_prazo
+    )
+    # De todas as notas 1 e 2 da base, que parcela veio de pedidos atrasados?
+    parcela_das_notas_baixas = (
+        pedidos.loc[pedidos.atrasado, "nota_baixa"].sum() / pedidos["nota_baixa"].sum()
+    )
+
     return {
-        "chi2": chi2, "p": p, "gl": gl,
-        "p_atr": p_atr, "p_ok": p_ok, "dif": dif,
-        "ic": (dif - 1.96 * ep, dif + 1.96 * ep),
-        "risco_relativo": p_atr / p_ok,
-        "pct_pedidos_atrasados": df.atrasado.mean(),
-        "parcela_notas_baixas_atraso": parcela,
+        "chi2": qui_quadrado, "p": valor_p, "gl": graus_de_liberdade,
+        "p_atr": proporcao_atrasados, "p_ok": proporcao_no_prazo, "dif": diferenca,
+        "ic": (diferenca - 1.96 * erro_padrao, diferenca + 1.96 * erro_padrao),
+        "risco_relativo": proporcao_atrasados / proporcao_no_prazo,  # "quantas vezes mais chance"
+        "pct_pedidos_atrasados": pedidos.atrasado.mean(),
+        "parcela_notas_baixas_atraso": parcela_das_notas_baixas,
     }
 
 
-def graficos(df):
+def graficos(pedidos):
+    """Desenha dois gráficos de barras (nota média e % de nota baixa) por faixa de atraso."""
     SAIDA.mkdir(exist_ok=True)
-    resumo = (df.groupby("faixa_atraso")
-                .agg(nota_media=("nota_avaliacao", "mean"), pct_baixa=("nota_baixa", "mean"),
-                     pedidos=("pedido_id", "size"))
-                .sort_index())
-    rotulos = [f.split(". ", 1)[1] for f in resumo.index]
-    cores = ["#2E7D32", "#66BB6A", "#FFB300", "#F57C00", "#C62828"]
+    resumo_por_faixa = (
+        pedidos.groupby("faixa_atraso")
+        .agg(nota_media=("nota_avaliacao", "mean"), pct_baixa=("nota_baixa", "mean"),
+             pedidos=("pedido_id", "size"))
+        .sort_index()
+    )
+    # As faixas vêm como "1. No prazo", "2. Até 3 dias"... O número só garante a ordem; tiramos para o rótulo.
+    rotulos = [faixa.split(". ", 1)[1] for faixa in resumo_por_faixa.index]
+    cores = ["#2E7D32", "#66BB6A", "#FFB300", "#F57C00", "#C62828"]  # do verde (no prazo) ao vermelho (muito atrasado)
 
-    for coluna, titulo, nome, fmt in [
-        ("nota_media", "Nota média da avaliação por situação da entrega", "nota_por_atraso.png", lambda v: br(v, 2)),
-        ("pct_baixa", "Percentual de avaliações com nota 1 ou 2", "nota_baixa_por_atraso.png", lambda v: br(100 * v, 1) + "%"),
+    # Cada volta do laço desenha um gráfico: (coluna, título, arquivo, como escrever o número na barra).
+    for coluna, titulo, arquivo, formatar in [
+        ("nota_media", "Nota média da avaliação por situação da entrega", "nota_por_atraso.png",
+         lambda valor: formatar_numero(valor, 2)),
+        ("pct_baixa", "Percentual de avaliações com nota 1 ou 2", "nota_baixa_por_atraso.png",
+         lambda valor: formatar_numero(100 * valor, 1) + "%"),
     ]:
-        fig, ax = plt.subplots(figsize=(9, 4.8))
-        barras = ax.bar(rotulos, resumo[coluna], color=cores)
-        for b, v in zip(barras, resumo[coluna]):
-            ax.text(b.get_x() + b.get_width() / 2, b.get_height(), fmt(v), ha="center", va="bottom", fontsize=10)
-        ax.set_title(titulo, fontsize=13, loc="left")
-        ax.spines[["top", "right"]].set_visible(False)
-        ax.tick_params(axis="x", labelsize=9)
+        figura, eixo = plt.subplots(figsize=(9, 4.8))
+        barras = eixo.bar(rotulos, resumo_por_faixa[coluna], color=cores)
+        for barra, valor in zip(barras, resumo_por_faixa[coluna]):
+            eixo.text(barra.get_x() + barra.get_width() / 2, barra.get_height(), formatar(valor),
+                      ha="center", va="bottom", fontsize=10)
+        eixo.set_title(titulo, fontsize=13, loc="left")
+        eixo.spines[["top", "right"]].set_visible(False)  # tira as bordas de cima e da direita
+        eixo.tick_params(axis="x", labelsize=9)
         if coluna == "pct_baixa":
-            ax.yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
-        plt.setp(ax.get_xticklabels(), rotation=12, ha="right")
-        fig.text(0.01, 0.01, f"Base Olist, {br(len(df), 0)} pedidos entregues de 01/2017 a 08/2018",
-                 fontsize=8, color="#666")
-        fig.tight_layout(rect=(0, 0.03, 1, 1))
-        fig.savefig(SAIDA / nome, dpi=150)
-        plt.close(fig)
-    return resumo
+            eixo.yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
+        plt.setp(eixo.get_xticklabels(), rotation=12, ha="right")
+        figura.text(0.01, 0.01, f"Base Olist, {formatar_numero(len(pedidos), 0)} pedidos entregues de 01/2017 a 08/2018",
+                    fontsize=8, color="#666")
+        figura.tight_layout(rect=(0, 0.03, 1, 1))
+        figura.savefig(SAIDA / arquivo, dpi=150)
+        plt.close(figura)  # libera a memória do gráfico antes de desenhar o próximo
+    return resumo_por_faixa
 
 
 def main():
-    df = carregar()
-    mw = teste_mann_whitney(df)
-    pr = teste_proporcoes(df)
-    resumo = graficos(df)
+    pedidos = carregar()
+    resultado_mann_whitney = teste_mann_whitney(pedidos)
+    resultado_proporcoes = teste_proporcoes(pedidos)
+    resumo_por_faixa = graficos(pedidos)
 
-    conclusao_h1 = "rejeitamos H0" if mw["p"] < ALFA else "não rejeitamos H0"
-    conclusao_h2 = "rejeitamos H0" if pr["p"] < ALFA else "não rejeitamos H0"
-    p_txt = lambda p: "< 0,0001" if p < 1e-4 else br(p, 4)
+    # Regra de decisão: p-valor menor que o ALFA = "rejeitamos H0" (a diferença é real).
+    conclusao_h1 = "rejeitamos H0" if resultado_mann_whitney["p"] < ALFA else "não rejeitamos H0"
+    conclusao_h2 = "rejeitamos H0" if resultado_proporcoes["p"] < ALFA else "não rejeitamos H0"
+    # p-valores minúsculos viram "< 0,0001" em vez de um monte de zeros.
+    formatar_p = lambda valor_p: "< 0,0001" if valor_p < 1e-4 else formatar_numero(valor_p, 4)
 
-    linhas = [
+    mw = resultado_mann_whitney
+    pr = resultado_proporcoes
+    br = formatar_numero  # apelido curto só para o texto do relatório abaixo ficar legível
+
+    # O relatório é montado linha a linha e gravado em Markdown.
+    linhas_do_relatorio = [
         "# Teste de hipótese, atraso na entrega x avaliação do cliente",
         "",
-        f"Base com {br(len(df), 0)} pedidos entregues e avaliados, de 01/2017 a 08/2018. "
+        f"Base com {br(len(pedidos), 0)} pedidos entregues e avaliados, de 01/2017 a 08/2018. "
         f"{br(100 * pr['pct_pedidos_atrasados'], 1)}% chegaram depois da data prometida.",
         "",
         "## H1. Pedidos atrasados recebem notas menores",
@@ -134,7 +187,7 @@ def main():
         f"| Nota média | {br(mw['media_atrasados'])} | {br(mw['media_no_prazo'])} |",
         f"| Nota mediana | {br(mw['mediana_atrasados'], 0)} | {br(mw['mediana_no_prazo'], 0)} |",
         "",
-        f"U = {br(mw['u'], 0)}, p-valor {p_txt(mw['p'])}. Tamanho de efeito pela correlação rank-biserial de "
+        f"U = {br(mw['u'], 0)}, p-valor {formatar_p(mw['p'])}. Tamanho de efeito pela correlação rank-biserial de "
         f"{br(abs(mw['rank_biserial']))}, o que é considerado efeito grande (acima de 0,5). Com alfa de 5%, {conclusao_h1}.",
         "",
         "## H2. Atraso aumenta a chance de nota 1 ou 2",
@@ -144,7 +197,8 @@ def main():
         f"(IC 95% de {br(100 * pr['ic'][0], 1)} a {br(100 * pr['ic'][1], 1)}). "
         f"Um pedido atrasado tem {br(pr['risco_relativo'], 1)} vezes mais chance de receber nota baixa.",
         "",
-        f"Qui-quadrado = {br(pr['chi2'], 1)}, {pr['gl']} grau de liberdade, p-valor {p_txt(pr['p'])}. {conclusao_h2[0].upper() + conclusao_h2[1:]}.",
+        f"Qui-quadrado = {br(pr['chi2'], 1)}, {pr['gl']} grau de liberdade, p-valor {formatar_p(pr['p'])}. "
+        f"{conclusao_h2[0].upper() + conclusao_h2[1:]}.",
         "",
         "## Leitura de negócio",
         "",
@@ -158,12 +212,15 @@ def main():
         "| Situação da entrega | Pedidos | Nota média | Nota 1 ou 2 |",
         "|---|---|---|---|",
     ]
-    for faixa, r in resumo.iterrows():
-        linhas.append(f"| {faixa.split('. ', 1)[1]} | {br(r.pedidos, 0)} | {br(r.nota_media)} | {br(100 * r.pct_baixa, 1)}% |")
-    linhas += ["", "![Nota média](nota_por_atraso.png)", "", "![Nota baixa](nota_baixa_por_atraso.png)", ""]
+    for faixa, dados_da_faixa in resumo_por_faixa.iterrows():
+        linhas_do_relatorio.append(
+            f"| {faixa.split('. ', 1)[1]} | {br(dados_da_faixa.pedidos, 0)} "
+            f"| {br(dados_da_faixa.nota_media)} | {br(100 * dados_da_faixa.pct_baixa, 1)}% |"
+        )
+    linhas_do_relatorio += ["", "![Nota média](nota_por_atraso.png)", "", "![Nota baixa](nota_baixa_por_atraso.png)", ""]
 
-    (SAIDA / "teste_hipotese.md").write_text("\n".join(linhas), encoding="utf-8")
-    print("\n".join(linhas))
+    (SAIDA / "teste_hipotese.md").write_text("\n".join(linhas_do_relatorio), encoding="utf-8")
+    print("\n".join(linhas_do_relatorio))
 
 
 if __name__ == "__main__":
